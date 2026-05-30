@@ -979,6 +979,7 @@ function advFreeSubmit(){
 }
 
 function advPick(choice){
+  if(window._advPickOverride){ window._advPickOverride(choice); return; }
   // Disable all option buttons
   document.querySelectorAll('.adv-opt').forEach(b=>{ b.disabled=true; b.style.opacity='.4'; });
   advMsg('user', choice);
@@ -999,21 +1000,23 @@ function advPick(choice){
     advOptions(['Career acceleration','Global exposure','Finance & capital skills','Leadership & people skills','Strategy & innovation','Entrepreneurship / startup thinking','Network quality','Travel efficiency (fewer trips)','Cost minimisation','Deep functional expertise']);
   }
   else if(step===3){
-    if(!advState.priorities.includes(choice)) advState.priorities.push(choice);
-    if(advState.priorities.length < 3){
-      advMsg('ai', `Got it — <b>${choice}</b> added. Pick another priority (${3-advState.priorities.length} more), or click Done.`);
-      advOptions(['Career acceleration','Global exposure','Finance & capital skills','Leadership & people skills','Strategy & innovation','Entrepreneurship / startup thinking','Network quality','Travel efficiency (fewer trips)','Cost minimisation','Deep functional expertise','→ Done, show my plan']);
-    } else {
+    if(choice==='→ Done, show my plan' || advState.priorities.length >= 3){
       advState.step = 4;
       advMsg('ai', `Perfect — your priorities: <b>${advState.priorities.join(', ')}</b>.<br><br><b>How many working days of leave do you have for the EMBA?</b>`);
       advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
+    } else {
+      if(!advState.priorities.includes(choice)) advState.priorities.push(choice);
+      if(advState.priorities.length >= 3){
+        advState.step = 4;
+        advMsg('ai', `Perfect — your priorities: <b>${advState.priorities.join(', ')}</b>.<br><br><b>How many working days of leave do you have for the EMBA?</b>`);
+        advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
+      } else {
+        advMsg('ai', `Got it — <b>${choice}</b> added. Pick another (${3-advState.priorities.length} more), or click Done.`);
+        advOptions(['Career acceleration','Global exposure','Finance & capital skills','Leadership & people skills','Strategy & innovation','Entrepreneurship / startup thinking','Network quality','Travel efficiency (fewer trips)','Cost minimisation','Deep functional expertise','→ Done, show my plan']);
+      }
     }
   }
-  else if(step===3 && choice==='→ Done, show my plan'){
-    advState.step=4;
-    advMsg('ai',`<b>How many working days of leave do you have for the EMBA?</b>`);
-    advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
-  }
+// Done case handled inside step 3 block above
   else if(step===4){
     const leaveMap = {'Under 20 days':15,'20–30 days':25,'30–40 days':35,'40–50 days':45,'50+ days / unlimited':60};
     advState.leave = leaveMap[choice] || 30;
@@ -1034,16 +1037,7 @@ function advPick(choice){
   }
 }
 
-// Handle "Done" option in step 3
-document.addEventListener('click', e=>{
-  if(e.target.classList.contains('adv-opt') && e.target.textContent==='→ Done, show my plan' && advState.step===3){
-    document.querySelectorAll('.adv-opt').forEach(b=>{ b.disabled=true; b.style.opacity='.4'; });
-    advMsg('user','→ Done, show my plan');
-    advState.step=4;
-    advMsg('ai',`<b>How many working days of leave do you have for the EMBA?</b>`);
-    advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
-  }
-});
+// Done listener removed — handled inside advPick
 
 function advBuildPlan(){
   const role = advState.role;
@@ -1215,12 +1209,7 @@ function advScoreSingle(c){
   advMsg('ai', html);
 }
 
-// Override advPick for deep dive multi-match
-const _origAdvPick = advPick;
-function advPick(choice){
-  if(window._advPickOverride){ window._advPickOverride(choice); return; }
-  _origAdvPick(choice);
-}
+// advPick override removed — handled inside advPick directly
 
 </script>
 
