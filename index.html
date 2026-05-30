@@ -216,6 +216,9 @@ h1 em{font-style:italic;color:var(--ge)}
   <div class="li"><span class="sw" style="background:#DB2777;border-radius:3px"></span>Dubai block</div>
   <div class="li"><span class="sw" style="background:transparent;border:1.5px dashed #7C3AED;border-radius:3px"></span>Blended</div>
   <div class="li"><span class="sw" style="background:#059669;border-radius:10px"></span>GE Experience</div>
+  <div class="li" style="margin-left:8px;border-left:1px solid var(--bdr);padding-left:12px"><span class="sw" style="background:#f59e0b;opacity:.5;border-radius:2px"></span>Ramadan</div>
+  <div class="li"><span class="sw" style="background:#10b981;opacity:.5;border-radius:2px"></span>Eid</div>
+  <div class="li"><span class="sw" style="background:#8b5cf6;opacity:.5;border-radius:2px"></span>Hajj</div>
   <div class="click-hint">* = exam &nbsp;·&nbsp; Hover for summary &nbsp;·&nbsp; Click for full details</div>
 </div>
 
@@ -287,6 +290,12 @@ const PHASE_DATES={
   SPR:{s:'2027-01-04',e:'2027-03-28'},
   SUM:{s:'2027-03-22',e:'2027-07-02'}
 };
+// Religious / personal calendar constraints to avoid
+const CONSTRAINT_DATES=[
+  {label:'Ramadan', s:'2027-02-08', e:'2027-03-09', col:'#f59e0b'},
+  {label:'Eid al-Fitr', s:'2027-03-10', e:'2027-03-15', col:'#10b981'},
+  {label:'Hajj', s:'2027-05-16', e:'2027-05-20', col:'#8b5cf6'}
+];
 
 // Map fullCode -> date range (extracted from timetable string)
 function extractDates(c){
@@ -449,6 +458,15 @@ function buildTimeline(){
     wc.textContent=d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     strip.appendChild(wc);
   }
+  // Constraint date labels in header
+  CONSTRAINT_DATES.forEach(cd=>{
+    const cs=new Date(cd.s), ce=new Date(cd.e);
+    const lx=(cs-TL_START)/totalMs*TOTAL_W;
+    const lbl=document.createElement('div');
+    lbl.style.cssText=`position:absolute;left:${lx+2}px;bottom:2px;font-size:8px;font-weight:700;color:${cd.col};opacity:.95;pointer-events:none;white-space:nowrap`;
+    lbl.textContent='◆ '+cd.label;
+    strip.appendChild(lbl);
+  });
   head.appendChild(strip);
   grid.appendChild(head);
 
@@ -476,6 +494,16 @@ function buildTimeline(){
       const wd=(te-ts)/totalMs*TOTAL_W;
       const band=document.createElement('div');
       band.style.cssText=`position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${tb.col};opacity:.03;pointer-events:none`;
+      ba.appendChild(band);
+    });
+    // constraint date bands per row
+    CONSTRAINT_DATES.forEach(cd=>{
+      const cs=new Date(cd.s), ce=new Date(cd.e);
+      const lx=(cs-TL_START)/totalMs*TOTAL_W;
+      const wd=Math.max(2,(ce-cs)/totalMs*TOTAL_W);
+      const band=document.createElement('div');
+      band.style.cssText=`position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${cd.col};opacity:.1;pointer-events:none;border-left:1px dashed ${cd.col}88;border-right:1px dashed ${cd.col}88`;
+      band.title=cd.label;
       ba.appendChild(band);
     });
 
@@ -603,6 +631,24 @@ function build(){
       wkH.appendChild(wc);
     }
     tl.appendChild(wkH);
+
+    // ── Religious/constraint date overlays for this term ──
+    CONSTRAINT_DATES.forEach(cd=>{
+      const cs=new Date(cd.s), ce=new Date(cd.e);
+      if(ce < pS || cs > pE) return; // not in this term
+      const clampS=Math.max(cs.getTime(), pS.getTime());
+      const clampE=Math.min(ce.getTime(), pE.getTime());
+      const lx=LBLW + (clampS-pS)/totalMs*W;
+      const wd=Math.max(3,(clampE-clampS)/totalMs*W);
+      const band=document.createElement('div');
+      band.style.cssText=`position:absolute;left:${lx}px;width:${wd}px;top:24px;bottom:0;background:${cd.col};opacity:.12;pointer-events:none;z-index:1;border-left:1.5px dashed ${cd.col}99;border-right:1.5px dashed ${cd.col}99`;
+      band.title=cd.label+' ('+fmtD(cd.s)+' – '+fmtD(cd.e)+')';
+      const lbl=document.createElement('div');
+      lbl.style.cssText=`position:absolute;left:${lx+2}px;top:26px;font-size:8px;font-weight:700;color:${cd.col};opacity:.9;pointer-events:none;z-index:2;white-space:nowrap;writing-mode:vertical-rl;text-orientation:mixed;letter-spacing:.5px`;
+      lbl.textContent=cd.label;
+      tl.appendChild(band);
+      tl.appendChild(lbl);
+    });
 
     calCourses.forEach(sessions=>{
       const rep=sessions[0]; // representative for name/style
@@ -910,7 +956,7 @@ function advStart(){
   advMsg('ai', `<b>👋 Welcome to your EMBA Strategy Advisor</b><br><br>
 I'll help you build a personalised elective plan based on your goals and constraints — no account or API key needed.<br><br>
 I have full knowledge of all <b>${Object.keys(advUniqueCourses()).length} electives</b> and <b>${GE_DB.length} Global Experience trips</b> in the EMBALJ 2027 portfolio.<br><br>
-Let's start with the most important question:<br><br>
+Pick an option below, or just <b>type naturally</b> at the bottom anytime (e.g. <i>"I want to be a CFO"</i> or <i>"show me finance courses"</i>).<br><br>
 <b>What is your target role?</b>`);
   advOptions(['CEO','COO','CFO','Board Member','Founder / Entrepreneur','MD / Partner']);
 }
@@ -1211,6 +1257,103 @@ function advScoreSingle(c){
 
 // advPick override removed — handled inside advPick directly
 
+// ── FREE-TEXT INPUT HANDLING ───────────────────────────────────────────
+function advKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); advSend(); }
+}
+
+function advSend(){
+  const input = document.getElementById('advInput');
+  if(!input) return;
+  const text = (input.value||'').trim();
+  if(!text) return;
+  input.value='';
+  input.style.height='auto';
+  advMsg('user', text.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  advHandleText(text);
+}
+
+function advHandleText(text){
+  const t = text.toLowerCase();
+  const uniq = advUniqueCourses();
+
+  // 1. If a deep-dive override is waiting, route there
+  if(window._advFreeCallback){ /* handled by free input */ }
+
+  // 2. Course code match (e.g. "E176", "tell me about E250")
+  const codeMatch = text.match(/\bE\d{2,3}\b/i);
+  if(codeMatch){
+    const code = codeMatch[0].toUpperCase();
+    if(uniq[code]){ advScoreSingle(uniq[code]); return; }
+  }
+
+  // 3. Detect role mention
+  const roleWords = {
+    'ceo':'CEO','chief executive':'CEO',
+    'coo':'COO','operating officer':'COO','operations':'COO',
+    'cfo':'CFO','finance officer':'CFO','financial officer':'CFO',
+    'board':'Board','director':'Board','governance':'Board',
+    'founder':'Founder','entrepreneur':'Founder','startup':'Founder',
+    'partner':'MD/Partner','managing director':'MD/Partner','md ':'MD/Partner'
+  };
+  let detectedRole=null;
+  for(const k in roleWords){ if(t.includes(k)){ detectedRole=roleWords[k]; break; } }
+
+  // 4. "score"/"best"/"recommend" + role → rebuild plan
+  if(detectedRole && (t.includes('score')||t.includes('best')||t.includes('recommend')||t.includes('plan')||t.includes('elective')||t.includes('course')||t.includes('target')||t.includes('become')||t.includes('want'))){
+    advState.role = detectedRole;
+    if(!advState.industry) advState.industry='(unspecified)';
+    if(!advState.leave) advState.leave=30;
+    advMsg('ai', `Got it — optimising for <b>${detectedRole}</b>. Here's your updated plan:`);
+    advState.step=7;
+    advBuildPlan();
+    return;
+  }
+
+  // 5. Keyword search across courses (e.g. "show me finance courses", "anything on negotiation")
+  const stopwords = ['show','me','the','a','an','about','tell','what','which','courses','course','elective','electives','is','are','for','on','any','anything','good','best','top','related','to','of','in','and'];
+  const kws = t.replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>2 && !stopwords.includes(w));
+  if(kws.length){
+    const matches = Object.values(uniq).filter(c=>{
+      const hay=(c.name+' '+c.sa).toLowerCase();
+      return kws.some(k=>hay.includes(k));
+    });
+    if(matches.length){
+      const role = advState.role||'CEO';
+      const scored = matches.map(c=>({...c,score:scoreC(c,role)})).sort((a,b)=>b.score-a.score).slice(0,8);
+      let html=`Found <b>${matches.length}</b> course${matches.length>1?'s':''} matching "<i>${kws.join(' ')}</i>"`;
+      html+= advState.role?` — scored for <b>${role}</b>:`:`:`;
+      html+=`<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:11px"><tr style="background:rgba(255,255,255,.1)"><th style="padding:5px 6px;text-align:left">Code</th><th style="padding:5px 6px;text-align:left">Course</th><th style="padding:5px 6px;text-align:left">Stream</th><th style="padding:5px 6px;text-align:center">Score</th></tr>`;
+      scored.forEach((c,i)=>{
+        html+=`<tr style="background:${i%2?'rgba(255,255,255,.03)':''}"><td style="padding:4px 6px;color:#a5b4fc;font-weight:600">${c.code}</td><td style="padding:4px 6px">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,34)}</td><td style="padding:4px 6px;color:#8892a4">${c.sa}</td><td style="padding:4px 6px;text-align:center;color:#fbbf24">${c.score}/10</td></tr>`;
+      });
+      html+=`</table><span style="color:#64748b;font-size:11px">Type a code (e.g. ${scored[0].code}) for a full breakdown.</span>`;
+      advMsg('ai', html);
+      return;
+    }
+  }
+
+  // 6. Help / fallback
+  if(t.includes('help')||t.includes('what can you')||t.includes('how')){
+    advMsg('ai', `I can help you in a few ways — just type naturally:<br><br>
+    • <b>"I want to become a CFO"</b> — builds a full plan for that role<br>
+    • <b>"show me finance courses"</b> — searches & scores by keyword<br>
+    • <b>"E176"</b> — detailed score breakdown for one course<br>
+    • <b>"best courses for board roles"</b> — ranked recommendations<br><br>
+    Or click <b>↺</b> at the top to restart the guided questionnaire.`);
+    return;
+  }
+
+  // 7. Unrecognised
+  advMsg('ai', `I didn't quite catch that. Try:<br>
+  • A target role — <i>"I'm aiming for COO"</i><br>
+  • A topic — <i>"anything on private equity?"</i><br>
+  • A course code — <i>"E250"</i><br>
+  • Or type <b>help</b> for options.`);
+}
+
+
+
 </script>
 
 <!-- MY ADVISOR FAB + PANEL -->
@@ -1232,7 +1375,7 @@ function advScoreSingle(c){
   </div>
   <div class="adv-msgs" id="advMsgs"></div>
   <div class="adv-input-row">
-    <textarea class="adv-input" id="advInput" placeholder="Ask your advisor…" rows="1" onkeydown="advKey(event)"></textarea>
+    <textarea class="adv-input" id="advInput" placeholder="Type freely, or use the buttons above…" rows="1" onkeydown="advKey(event)"></textarea>
     <button class="adv-send" id="advSend" onclick="advSend()">
       <svg width="16" height="16" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
