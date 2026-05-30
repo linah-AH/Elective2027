@@ -164,6 +164,15 @@ h1 em{font-style:italic;color:var(--ge)}
 .adv-bubble strong{color:#c8d5f0}
 .adv-bubble em{color:#a5b4fc}
 .adv-bubble code{background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px;font-size:11px}
+.adv-opts{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 8px;max-width:100%}
+.adv-opt{background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.35);color:#a5b4fc;padding:6px 13px;border-radius:20px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;text-align:left}
+.adv-opt:hover:not(:disabled){background:rgba(99,102,241,.3);border-color:rgba(99,102,241,.6)}
+.adv-opt:disabled{opacity:.4;cursor:default}
+.adv-free-input{display:flex;gap:8px;padding:4px 0 8px}
+.adv-bubble table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11.5px}
+.adv-bubble th{background:rgba(255,255,255,.1);padding:5px 8px;text-align:left;font-weight:600;border:1px solid rgba(255,255,255,.1)}
+.adv-bubble td{padding:4px 8px;border:1px solid rgba(255,255,255,.08)}
+.adv-bubble strong,.adv-bubble b{color:#c8d5f0}
 </style>
 </head>
 <body>
@@ -847,364 +856,372 @@ document.getElementById('sf').addEventListener('click',e=>{
 build();
 
 
-// ── MY ADVISOR ─────────────────────────────────────────────────────────
-const ADV_SYSTEM = `You are an Executive MBA Programme Strategy Advisor for the EMBALJ 2027 programme at London Business School. You have complete knowledge of the elective portfolio and Global Experience trips below.
+// ══════════════════════════════════════════════════════════════════════
+// MY ADVISOR — Rule-based, no API key required
+// ══════════════════════════════════════════════════════════════════════
+const ROLE_STREAM = {
+  CEO:       {SE:5,OB:5,FIN:4,MKT:4,EC:3,AC:3,MSO:3},
+  COO:       {MSO:5,OB:5,SE:4,FIN:4,AC:4,EC:3,MKT:3},
+  CFO:       {FIN:5,AC:5,EC:4,SE:3,MSO:3,OB:2,MKT:2},
+  Board:     {SE:5,FIN:5,AC:5,OB:4,EC:4,MKT:3,MSO:3},
+  Founder:   {SE:5,MKT:5,FIN:4,OB:4,EC:3,AC:2,MSO:3},
+  'MD/Partner':{FIN:5,SE:5,OB:4,MKT:4,AC:3,EC:3,MSO:3},
+};
+const ROLE_KW = {
+  CEO:       ['strategy','corporate','leadership','innovation','transform','governance','global','entrepreneur','growth','acquisition','negotiat','board'],
+  COO:       ['operations','supply','analytics','data','process','organis','execut','project','implement','digital','tech'],
+  CFO:       ['finance','investment','valuation','capital','accounting','risk','private equity','venture','banking','financial','tax','acquisition'],
+  Board:     ['governance','board','ethics','sustain','esg','risk','regulat','accountability','stakeholder','strategy'],
+  Founder:   ['entrepreneur','startup','venture','innovation','digital','growth','marketing','brand','customer','tech','platform'],
+  'MD/Partner':['acquisition','deal','private equity','investment','banking','valuation','strategy','business development'],
+};
+const GE_SCORES = {
+  'C539':  {label:'Tokyo',       theme:'Demographics & Technology',   CEO:5,COO:3,CFO:2,Board:4,Founder:4,'MD/Partner':4},
+  'C543':  {label:'Cape Town',   theme:'Inclusive Growth',            CEO:4,COO:3,CFO:2,Board:5,Founder:3,'MD/Partner':3},
+  'C520':  {label:'Buenos Aires',theme:'Crisis & Volatility',         CEO:5,COO:4,CFO:4,Board:4,Founder:4,'MD/Partner':5},
+  'C545':  {label:'Silicon Valley',theme:'Tech & Innovation',         CEO:4,COO:4,CFO:3,Board:3,Founder:5,'MD/Partner':4},
+  'C516':  {label:'India',       theme:'Emerging Markets',            CEO:4,COO:3,CFO:3,Board:5,Founder:4,'MD/Partner':4},
+  'C531':  {label:'China',       theme:'China Strategy',              CEO:5,COO:4,CFO:4,Board:4,Founder:4,'MD/Partner':5},
+  'C558':  {label:'Middle East', theme:'Gulf Markets',                CEO:4,COO:3,CFO:4,Board:4,Founder:3,'MD/Partner':4},
+};
 
-=== ELECTIVE PORTFOLIO (Code | Name | Stream | Term | Format | Faculty) ===
-E482 | Creativity in Business | MKT | AUT | Block Week 4 | Richard Hytner
-E518 | Digital Investing | AC | AUT | Block Week 4 | Alastair Lawrence
-E176 | Project and Infrastructure Finance | FIN | AUT | Block Week 4 | Ramin Baghai
-E622 | Wisdom and Happiness | OB | AUT | Block Week 4 | Selin Kesebir
-E460 | Channel and Sales Force Management | MKT | AUT | Block Week 5 | Anja Lambrecht
-E250 | Managing Corporate Turnarounds | SE | AUT | Block Week 5 | Michael G Jacobides
-E487 | Managing Healthcare | MSO | AUT | Block Week 5 | Jérémie Gallien/ Nicos Savva/ Kamalini Ramdas
-E126 | Private Equity & Venture Capital | AC | AUT | Block Week 5 | Florin Vasvari/ Alon Avner
-E415 | Topics in Asset Management | FIN | AUT | Block Week 5 | Magnus Dahlquist
-E613 | Crisis Leadership and Human Behaviour (5-Session course) | OB/MKT | AUT | Block Week 6 | David Faro/ , Niro Sivanathan
-E506 | Employee Engagement and Positive Psychology | OB | AUT | Block Week 6 | Daniel Cable
-E633 | Entrepreneurial Negotiations (5-Session course) | OB | AUT | Block Week 6 | Niro Sivanathan
-E438 | Strategies for Growth and Transformation (Blended Delivery - Live sessions entirely online) | SE | AUT | Block Week 6 | Freek Vermeulen
-E496 | Wealth Management | FIN | AUT | Dubai Block Week | Narayan Naik/ Vidur Varma
-E473 | Real Estate Finance | FIN | AUT | Dubai Block Week | João Cocco
-E485 | Distressed Investing | AC | SPR | 5 Week 1 | Florin Vasvari/ Alon Avner
-E146 | European Financial Markets | EC | SPR | 5 Week 1 | Richard Portes
-E224 | Financing the Entrepreneurial Business | SE | SPR | 5 Week 1 | Luisa Alemany
-E446 | Paths to Power | OB | SPR | 5 Week 1 | Shihan Li
-E605 | Strategy Execution | SE | SPR | 5 Week 1 | Costas Markides/ , Andrew MacLennan
-E520 | A/B Testing and Advanced Experimentation for Business Decisions | MKT | SPR | 5 Week 2 | Anja Lambrecht
-E650 | Agentic Commerce (5-Session course) NEW ELECTIVE | MKT | SPR | 5 Week 2 | Helen Edwards/ , Bruce Hardie/ , Oded Koenigsberg/ , Anja Lambrecht/ , Michael Ross
-E417 | Building the Agile Organisation | SE | SPR | 5 Week 2 | Stefano Turconi/ David Lewis
-E480 | Business Model Experiments | MSO | SPR | 5 Week 2 | TBC
-E177 | Customer and Marketing Analytics | MKT | SPR | 5 Week 2 | Bruce Hardie
-E628 | Data Science for Business with Python | MSO | SPR | 5 Week 2 | Kostis Christodoulou
-E629 | Digital Marketing | MKT | SPR | 5 Week 2 | Xu Zhang
-E485 | Distressed Investing | FIN | SPR | 5 Week 2 | Christopher Hennessy/ Alon Avner
-E348 | Energy Markets: Transitions to Sustainability | MSO | SPR | 5 Week 2 | Derek Bunn
-E625 | Finance and Sustainability | FIN | SPR | 5 Week 2 | Lakshmi Naaraayanan
-E141 | Financial Analytics | MSO | SPR | 5 Week 2 | Victor De Miguel
-E261 | Fixed Income Securities | FIN | SPR | 5 Week 2 | Suleyman Basak
-E465 | Leading Innovation for Impact | MKT | SPR | 5 Week 2 | Rajesh Chandy
-E408 | Leading Teams and Organisations | OB | SPR | 5 Week 2 | Melanie Prengler
-E326 | Negotiation & Bargaining | OB | SPR | 5 Week 2 | Elinor Flynn
-E638 | Strategic Advertising: Building effective campaigns in a complex world (5-Session course) | MKT | SPR | 5 Week 2 | Helen Edwards
-E648 | Strategy in a World of Continuous Disruption NEW ELECTIVE | SE | SPR | 5 Week 2 | Costas Markides
-E320 | Thinking Strategically | EC | SPR | 5 Week 2 | Jean-Pierre Benoit
-E236 | Advanced Corporate Finance | FIN | SPR | 5 Week 2 Eve | Lakshmi Naaraayanan
-E203 | Derivatives | FIN | SPR | 5 Week 2 Eve | Konstantinos Zachariadis
-E615 | Entrepreneurial Mindset (Blended Delivery - Live sessions entirely online) (5-Session course) | SE | SPR | 5 Week 2 Eve | Freek Vermeulen
-E334 | Time Series Analysis | MSO | SPR | 5 Week 2 Eve | Sebastian Del Bano Rollin
-E444 | Financial Statement Analysis | AC | SPR | Blended Modular | Stefano De Cesaris
-E646 | Prescriptive Analytics for Business Leaders NEW ELECTIVE (Blended) | MSO | SPR | Blended Modular | Nitish Jain
-E433 | Pricing Strategy and Tactics | MKT | SPR | Blended Modular | Oded Koenigsberg
-E237 | World Economy: Problems & Prospects | EC | SPR | Blended Modular | Lucrezia Reichlin
-E491 | Banking and Monetary Policy in the Global Economy | EC | SPR | Block Week 7 | Lucrezia Reichlin/ , Hélène Rey
-E626 | Digital Deep Dive | MSO | SPR | Block Week 7 | Nitish Jain/ S. Alex Yang
-E212 | Equity Investment Management | FIN | SPR | Block Week 7 | Narayan Naik/ Vidur Varma
-E311 | Brand Management | MKT | SPR | Block Week 8 | Simona Botti
-E202 | Building a Scalable Business | SE | SPR | Block Week 8 | Olenka Kacperczyk/ , Farhan Lalji
-E500 | Inter-Personal Dynamics | OB | SPR | Block Week 8 | Thomas Mussweiler
-E139 | Project Management | MSO | SPR | Block Week 8 | Toby Velte
-E614 | Diversity Science for Leaders | OB | SPR | Day | Aneeta Rattan
-E123 | Mergers, MBOs & Other Corp. Reorgs | FIN | SPR | Day | Constantine Yannelis
-E206 | Securities Analysis & Financial Modelling | AC | SPR | Day | Lakshmanan Shivakumar/ , Stefano De Cesaris/ , Scott Richrdson
-E406 | Emerging Markets | EC | SPR | Eve | Elias Papaioannou/ , Paolo Surico
-E416 | Hedge Funds | FIN | SPR | Eve | Drago Indjic
-E616 | From Innovation to Market | SE | SPR | Irregular | Luisa Alemany
-E621 | The Entrepreneurship Lab | SE | SPR | Irregular | George Davies
-E217 | Advanced Marketing Strategy | MKT | SUM | 5 Week 2 | Annick Desmecht
-E609 | Alternative Credit Investing | FIN | SUM | 5 Week 2 | Alon Avner
-E612 | Applications of AI & ML in Business | MKT | SUM | Dubai Block Week | Lil Mohan
-E470 | Behavioural Economics in Action | MKT/EC | SUM | 5 Week 1 | David Faro/ , Jean-Pierre Benoit
-E401 | Behavioural Finance | FIN | SUM | Block Week 9 | Paul Fontanier
-E645 | Climate Finance & Investing NEW ELECTIVE (Blended) | FIN | SUM | Blended Modular | Narayan Naik/ Vidur Varma
-E637 | Consumer-driven disruption: the new fuel for growth (5-Session course) | MKT | SUM | 5 Week 1 | Helen Edwards
-E199 | Corporate Strategy | SE | SUM | Day | Francisco Brahm
-E502 | Corporate Valuation | FIN | SUM | Day | Alexander Gorbenko
-E606 | Data-driven Strategy (5-Session course) | SE | SUM | Block Week 10 | Anil Doshi
-E651 | Developing Entrepreneurial Opportunities (5-Session Course) NEW ELECTIVE | SE | SUM | Block Week 10 | Sukrit Puri
-E608 | Digital for Impact | MKT/SE | SUM | 5 Week 1 | Rajesh Chandy/ , Jessica Spungin
-E600 | Digital Strategy (5-Session course) | SE | SUM | 5 Week 2 | Keyvan Vakili
-E640 | Economics of AI | EC | SUM | Day | Emre Ozdenoren / Alex Teytelboym
-E505 | Elements of Machine Learning for Business | EC | SUM | 5 Week 2 | Lucrezia Reichlin/ , Giuseppe Ragusa
-E400 | Entrepreneurship Summer School | SE | SUM | Irregular Block Week | Rupert Merson/ George Davies
-E472 | Family Business: A Guide for Owners, Managers and Advisors | SE | SUM | Block Week 11 | Rupert Merson/ , Heinz Peter Elstrodt
-E503 | Fin Tech | FIN | SUM | Day | Narayan Naik/ Drago Indijic
-E107 | Financial Analysis of Mergers, Acq | AC | SUM | Block Week 11 | Lauren Reid
-E310 | Financial Engineering & Risk Management | FIN | SUM | 5 Week 1 | Suleyman Basak
-E634 | Generative Artificial Intelligence (5-Session course) | MSO/SE | SUM | Block Week 9 | Nicos Savva/ , Keyvan Vakili
-E306 | Global Capital Markets and Currencies | EC | SUM | Eve | Vania Stavrakeva
-E644 | Global Economic Policy and Performance (5-session course) | EC | SUM | 5 Week 1 Eve | Lucrezia Reichlin
-E507 | Global Strategy | SE | SUM | 5 Week 1 | Donal Crilly
-E471 | Growing Businesses in Emerging and Frontier Markets (5-Session course) | SE | SUM | 5 Week 1 | Sukrit Puri
-E643 | Growth: Marketing as an Investment, Not a Spend (5-session course) | MKT | SUM | 5 Week 1 Eve | Annick Desmecht
-E617 | Innovation and Technology Strategy (5-Session course) | SE | SUM | 5 Week 2 | Jessica Spungin/ , George Davies
-E641 | International Finance | FIN | SUM | 5 Week 2 | Christian Heyerdahl-Larsen
-E509 | Luxury Strategy | SE | SUM | Irregular 
-5 Week 1 | Stefano Turconi
-E508 | Managing a Digital Organisation | SE | SUM | Dubai Block Week | Muhammed Mekki
-E515 | Managing and Investing in Responsible Businesses | SE/FIN | SUM | 5 Week 2 | Ioannis Ioannou/ , Moqi Xu
-E260 | Managing Change | OB | SUM | Day | Nicholas Clarke
-E252 | Managing Sport and Entertainment | MSO | SUM | Block Week 9 | Chris Voss
-E652 | Market Power for Profitability NEW ELECTIVE | EC | SUM | Block Week 9 | David Myatt/ Andrea Galeotti
-E631 | Marketing for a Better World (5-Session course) | MKT | SUM | 5 Week 2 | Jonathan Berman
-E395 | Mergers, Acquisitions and Alliances | SE | SUM | 5 Week 2 | Sarath Balachandran
-E189 | New Venture Development | SE | SUM | Day | Rupert Merson
-E501 | No Code Data Science using Generative AI | MSO | SUM | 5 Week 1 | Nicos Savva/ , Chiara Maiocchi
-E489 | Pathways to Start-up Success | SE | SUM | Block Week 9 | TBC
-E510 | Product Management | MKT | SUM | 5 Week 1 | Christian Miccio / TBC
-E517 | Python for Finance | FIN/MSO | SUM | 5 Week 1 | Francisco Gomes/ , Ekaterina Abramova
-E635 | Science for Managers (5-Session course) | MSO | SUM | 5 Week 2 | Chiara Maiocchi/ , Nicos Savva
-E327 | Strategic Innovation | SE | SUM | Day | Jessica Spungin/ , François Ortalo-Magné
-E335 | Supply Chain Management | MSO | SUM | 5 Week 1 | Jérémie Gallien
-E630 | Sustainability Leadership: Challenges and Opportunities (5-Session course) | SE | SUM | 5 Week 2 | Ioannis Ioannou
-E624 | Systematic Inventive Thinking | MKT | SUM | Block Week 9 | Jacob Goldenberg/, Nurit Cohen-Schoenfeld
-E636 | Taxes and Transparency for Sustainable Business | AC | SUM | Day | Matthew Mealey
-E620 | The Economics of a Crisis | EC | SUM | 5 Week 2 | Andrea Galeotti/ Paolo Surico/, Jean-Pierre Benoit/ Elias Papaioannou
-E602 | The Power of Networks | EC | SUM | 5 Week 2 | Andrea Galeotti
-E647 | Transition and Identity in Leadership Careers NEW ELECTIVE (Blended) | OB | SUM | Blended Modular | Herminia Ibarra
-E479 | Value Investing | FIN | SUM | Eve | Amit Kumar/, Nishant Gupta
-
-=== GLOBAL EXPERIENCE TRIPS (Code | Name | Theme | Location | Dates | Cohort) ===
-C539 AUT26 |  | Reflections from Japan: Dealing with demographic, social, technological | Tokyo | 18-24 October 2026 | Eligible: 
-C543 AUT26 |  | Inclusive Growth: Cape Town Immersion | Cape Town | 18-24 October 2026 | Eligible: 
-C520 AUT26 |  | Managing through Crisis and Volatility | Buenos Aires | 18-24 October 2026 | Eligible: 
-C514 AUT26 |  | Strategic Resilience | Athens | 6-12 December 2026 | Eligible: 
-C535 AUT26 |  | Unlocking Innovation: Saudi Arabia’s Economic Transformation | Saudi Arabia | 6-12 December 2026 | Eligible: 
-C541 AUT26 |  | Business and Political Uncertainty in Emerging Markets | Nairobi | 6-12 December 2026 | Eligible: 
-C524 SPR27 |  | Reinvention in Turbulent Times | Lima | 7-13 February 2027 | Eligible: 
-C503 SPR27 |  | Business Resilience in a Changing Climate | Beijing | 21-27 March 2027 | Eligible: 
-C544 SPR27 |  | Smart Investing in China and Emerging Markets | Shanghai | 21-27 March 2027 | Eligible: 
-C533 SPR27 |  | Sustainability in Global Value Chains | Singapore & Malaysia | 21-27 March 2027 | Eligible: 
-C526 SUM27 |  | Asset Management & Banking | Boston and New York | 2-8 May 2027 | Eligible: 
-C529 SUM27 |  | Digital Disruption | San Francisco | 2-8 May 2027 | Eligible: 
-C542 SUM27 |  | Denmark: Balancing economic success AND Sustainability goals | Copenhagen | 2-8 May 2027 | Eligible: 
-C527 SUM27 |  | Lessons from the Luxury Sector | Paris | 13-19 June 2027 | Eligible: 
-
-=== YOUR ROLE ===
-Help the user build a decision-quality, personalised EMBA study and travel strategy. Follow this structured advisory process:
-
-PART 1 — PROFILE GATHERING
-Collect: current role & background, career aspiration/target roles (COO/CEO/Board/CFO/Founder), priority capabilities to build, industry/domain, total leave available (days + any top-up dates), employer study leave sponsorship (yes/no), travel base city, cost sensitivity (low/med/high), travel-efficiency priority, calendar constraints (Ramadan, family, work blackouts), format preferences (block week/online/blended/regular), any courses already wanted or to avoid.
-
-Gather this CONVERSATIONALLY over multiple turns — not all at once as a form. Start with 2-3 key questions.
-
-PART 2 — ELECTIVE SCORING (once profile known)
-Score every relevant elective 1-10 on: COO relevance, CEO relevance, Board relevance, Strategic value, Financial value, Leadership value, Networking value. Roll into weighted score for their specific target role. Label HIGH-ROI and LOW-ROI choices. Challenge weak-but-popular options. Don't just describe courses — give real executive value assessment.
-
-PART 3 — ALTERNATIVE PLANS (at least 5)
-Build scenarios: (A) Maximum career impact, (B) Best balance impact + travel efficiency, (C) Lowest travel cost, (D) Strongest CEO prep, (E) Strongest Board/Governance prep. For each: electives selected, GE trip, number of trips, leave used, cost level, advantages, disadvantages.
-
-PART 4 — TRAVEL OPTIMISATION
-Show which electives + GE trips can be combined into single trips. Highest value per leave day. Recommended sequence, cities, timing. Working-leave days vs calendar days away.
-
-PART 5 — MASTER CALENDAR
-Chronological timeline of all events with running leave balance. Flag scheduling conflicts and risks.
-
-PART 6 — FINAL RECOMMENDATION
-Best plan + why it beats alternatives + expected value for target roles over 5-10 years + risks + backup plan.
-
-=== RULES ===
-- Be direct and decisive — this is a senior executive
-- Critically assess REAL executive value, not brochure descriptions
-- Optimise for career acceleration and efficient use of leave and budget  
-- Find ways to combine trips to minimise travel
-- Use tables, rankings, decision matrices
-- Where data is missing, state assumptions clearly
-- Answer the core question: "What is the optimal strategy to maximise my probability of reaching my target role?"
-
-Start with a warm greeting, introduce yourself briefly, then ask 2-3 key profile questions to begin.`;
-let advHistory = [];
+let advState = {
+  step: 0,
+  role: null,
+  industry: null,
+  leave: null,
+  priorities: [],
+  format_pref: null,
+  cost: null,
+};
 let advOpen = false;
-let advStarted = false;
-let ADV_KEY = '';
 
-function advGetKey(){
-  // Check localStorage first
-  const stored = localStorage.getItem('embalj_adv_key')||'';
-  if(stored) return stored;
-  return '';
+function toggleAdvisor(){
+  advOpen = !advOpen;
+  document.getElementById('advWrap').classList.toggle('open', advOpen);
+  if(advOpen && advState.step === 0) advStart();
+  if(advOpen) setTimeout(()=>document.getElementById('advInput') && document.getElementById('advInput').focus(), 100);
 }
 
-function advShowSetup(){
+function advStart(){
+  advState = {step:1, role:null, industry:null, leave:null, priorities:[], format_pref:null, cost:null};
   const msgs = document.getElementById('advMsgs');
-  if(document.getElementById('advSetupCard')) return;
-  const card = document.createElement('div');
-  card.id = 'advSetupCard';
-  card.className = 'adv-msg ai';
-  card.innerHTML = `<div class="adv-bubble" style="width:100%">
-    <div style="font-size:15px;margin-bottom:6px">👋 Welcome to your EMBA Advisor</div>
-    <div style="font-size:12px;color:#8892a4;margin-bottom:12px;line-height:1.6">
-      This advisor knows your full elective portfolio and GE trips, and will help you build a personalised study and travel strategy.<br><br>
-      It runs on Claude AI. To activate it, you need a free Anthropic API key — takes 2 minutes to get.
-    </div>
-    <div style="font-size:12px;font-weight:600;color:#c8d5f0;margin-bottom:6px">Step 1 — Get your free key:</div>
-    <a href="https://console.anthropic.com/settings/keys" target="_blank" style="display:inline-block;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.4);color:#a5b4fc;padding:6px 14px;border-radius:8px;font-size:12px;text-decoration:none;margin-bottom:12px">→ console.anthropic.com/settings/keys</a>
-    <div style="font-size:12px;font-weight:600;color:#c8d5f0;margin-bottom:6px">Step 2 — Paste it here:</div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="advKeyIn" type="password" placeholder="sk-ant-api03-..." 
-        style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 11px;font-size:12px;color:#e0e4ef;font-family:monospace;outline:none"
-        onkeydown="if(event.key==='Enter') advActivate()" />
-      <button onclick="advActivate()" 
-        style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif">
-        Activate
-      </button>
-    </div>
-    <div style="font-size:10.5px;color:#475569;margin-top:8px">Your key is saved in this browser only. <b style="color:#64748b">Open via the launcher script</b> (not by double-clicking the HTML) so the advisor works correctly.</div>
-  </div>`;
-  msgs.appendChild(card);
-  msgs.scrollTop = msgs.scrollHeight;
-  setTimeout(()=>{ const ki=document.getElementById('advKeyIn'); if(ki) ki.focus(); },150);
+  msgs.innerHTML = '';
+  advMsg('ai', `<b>👋 Welcome to your EMBA Strategy Advisor</b><br><br>
+I'll help you build a personalised elective plan based on your goals and constraints — no account or API key needed.<br><br>
+I have full knowledge of all <b>${Object.keys(advUniqueCourses()).length} electives</b> and <b>${GE_DB.length} Global Experience trips</b> in the EMBALJ 2027 portfolio.<br><br>
+Let's start with the most important question:<br><br>
+<b>What is your target role?</b>`);
+  advOptions(['CEO','COO','CFO','Board Member','Founder / Entrepreneur','MD / Partner']);
 }
 
-function advActivate(){
-  const val = (document.getElementById('advKeyIn')||{}).value||'';
-  if(!val.startsWith('sk-')){
-    document.getElementById('advKeyIn').style.borderColor='#ef4444';
-    setTimeout(()=>{ const el=document.getElementById('advKeyIn'); if(el) el.style.borderColor='rgba(255,255,255,.15)'; },1500);
-    return;
-  }
-  localStorage.setItem('embalj_adv_key', val);
-  ADV_KEY = val;
-  const card = document.getElementById('advSetupCard');
-  if(card) card.remove();
-  // Start conversation
-  advAddMsg('ai','<div class="adv-typing"><span></span><span></span><span></span></div>');
-  advCallAPI(null, true);
+function advUniqueCourses(){
+  const map = {};
+  COURSE_DB.forEach(c=>{ if(!map[c.code]) map[c.code]=c; });
+  return map;
 }
 
-function advClearKey(){
-  localStorage.removeItem('embalj_adv_key');
-  ADV_KEY = '';
-  advHistory = [];
-  advStarted = false;
-  document.getElementById('advMsgs').innerHTML = '';
-  advOpen = false;
-  document.getElementById('advWrap').classList.remove('open');
+function scoreC(c, role){
+  const parts = c.sa.replace('/',' ').split(' ');
+  const rs = ROLE_STREAM[role] || ROLE_STREAM['CEO'];
+  const base = Math.max(...parts.map(s=>rs[s]||3));
+  const kws = ROLE_KW[role] || [];
+  const bonus = kws.filter(k=>c.name.toLowerCase().includes(k)).length;
+  return Math.min(10, Math.round((base*1.5 + Math.min(bonus,3))*10)/10);
 }
 
-function advInit(){
-  ADV_KEY = advGetKey();
-  if(!ADV_KEY){ advShowSetup(); return; }
-  advAddMsg('ai','<div class="adv-typing"><span></span><span></span><span></span></div>');
-  advCallAPI(null, true);
-}
-
-function advAddMsg(role, htmlContent){
+function advMsg(role, html_content){
   const msgs = document.getElementById('advMsgs');
   const wrap = document.createElement('div');
   wrap.className = 'adv-msg ' + role;
   const bubble = document.createElement('div');
   bubble.className = 'adv-bubble';
-  bubble.innerHTML = htmlContent;
+  bubble.innerHTML = html_content;
   wrap.appendChild(bubble);
-  wrap.dataset.role = role;
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
-  return bubble;
 }
 
-function advKey(e){
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); advSend(); }
+function advOptions(opts){
+  const msgs = document.getElementById('advMsgs');
+  const wrap = document.createElement('div');
+  wrap.className = 'adv-opts';
+  opts.forEach(o=>{
+    const btn = document.createElement('button');
+    btn.className = 'adv-opt';
+    btn.textContent = o;
+    btn.onclick = ()=>{ advPick(o); };
+    wrap.appendChild(btn);
+  });
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-function advSend(){
-  const input = document.getElementById('advInput');
-  const text = input.value.trim();
-  if(!text) return;
-  input.value = '';
-  input.style.height = 'auto';
-  advAddMsg('user', text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'));
-  advHistory.push({role:'user', content:text});
-  // typing indicator
-  const typingWrap = document.createElement('div');
-  typingWrap.className = 'adv-msg ai';
-  typingWrap.innerHTML = '<div class="adv-bubble"><div class="adv-typing"><span></span><span></span><span></span></div></div>';
-  document.getElementById('advMsgs').appendChild(typingWrap);
-  document.getElementById('advMsgs').scrollTop = 99999;
-  document.getElementById('advSend').disabled = true;
-  advCallAPI(typingWrap, false);
+function advInput(placeholder, onSubmit){
+  const msgs = document.getElementById('advMsgs');
+  const row = document.createElement('div');
+  row.className = 'adv-free-input';
+  row.id = 'advFreeRow';
+  row.innerHTML = `<input id="advFreeIn" placeholder="${placeholder}" style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-size:13px;color:#e0e4ef;font-family:'DM Sans',sans-serif;outline:none" />
+    <button onclick="advFreeSubmit()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">OK</button>`;
+  msgs.appendChild(row);
+  msgs.scrollTop = msgs.scrollHeight;
+  window._advFreeCallback = onSubmit;
+  setTimeout(()=>document.getElementById('advFreeIn').focus(), 100);
+  document.getElementById('advFreeIn').onkeydown = e=>{ if(e.key==='Enter') advFreeSubmit(); };
 }
 
-async function advCallAPI(typingEl, isInit){
-  const msgs = isInit ? [] : [...advHistory.slice(0,-1)];
-  const lastUserMsg = isInit ? null : advHistory[advHistory.length-1];
-  
-  // Build messages for API
-  const apiMessages = isInit
-    ? [{role:'user', content:'[BEGIN SESSION] Please introduce yourself and ask me your first profile questions.'}]
-    : [...advHistory];
+function advFreeSubmit(){
+  const val = (document.getElementById('advFreeIn')||{}).value||'';
+  const row = document.getElementById('advFreeRow');
+  if(row) row.remove();
+  if(window._advFreeCallback) window._advFreeCallback(val);
+}
 
-  try{
-    if(!ADV_KEY){ advShowSetup(); if(typingEl) typingEl.remove(); document.getElementById('advSend').disabled=false; return; }
-    const payload = {
-      model:'claude-sonnet-4-6',
-      max_tokens:1024,
-      system: ADV_SYSTEM,
-      messages: apiMessages
-    };
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key': ADV_KEY,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-allow-browser':'true'
-      },
-      body: JSON.stringify(payload)
-    });
-    if(!resp.ok){
-      const errBody = await resp.text();
-      console.error('API error:', resp.status, errBody);
-      throw new Error('API error ' + resp.status + ' — check your API key and try again.');
-    }
-    const data = await resp.json();
-    const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-    
-    // Remove typing indicator
-    if(typingEl) typingEl.remove();
-    else document.querySelectorAll('.adv-msg.ai').forEach(m=>{
-      if(m.querySelector('.adv-typing')) m.remove();
-    });
-    
-    // Format and display
-    const formatted = advFormat(text);
-    const bubble = advAddMsg('ai', formatted);
-    
-    // Add to history
-    if(isInit) advHistory.push({role:'user', content:'[BEGIN SESSION] Please introduce yourself and ask me your first profile questions.'});
-    advHistory.push({role:'assistant', content:text});
-    
-  } catch(err){
-    if(typingEl) typingEl.remove();
-    else document.querySelectorAll('.adv-msg.ai').forEach(m=>{if(m.querySelector('.adv-typing')) m.remove();});
-    advAddMsg('ai', '⚠️ Error: ' + err.message + '<br><small style="color:#64748b">Open browser console (F12) for details.</small>');
-    console.error('Advisor error:', err);
+function advPick(choice){
+  // Disable all option buttons
+  document.querySelectorAll('.adv-opt').forEach(b=>{ b.disabled=true; b.style.opacity='.4'; });
+  advMsg('user', choice);
+
+  const step = advState.step;
+  if(step===1){
+    // Role selected
+    const roleMap = {'CEO':'CEO','COO':'COO','CFO':'CFO','Board Member':'Board','Founder / Entrepreneur':'Founder','MD / Partner':'MD/Partner'};
+    advState.role = roleMap[choice] || choice;
+    advState.step = 2;
+    advMsg('ai', `<b>${choice}</b> — great target. Knowing your industry helps me weight which electives have the most real-world leverage.<br><br><b>What is your primary industry?</b>`);
+    advOptions(['Banking / Financial Services','Consulting','Technology','Healthcare','Energy / Utilities','Consumer / Retail','Industrials / Manufacturing','Real Estate','Media / Telecom','Other']);
   }
-  document.getElementById('advSend').disabled = false;
+  else if(step===2){
+    advState.industry = choice;
+    advState.step = 3;
+    advMsg('ai', `Noted — <b>${choice}</b>. Now let's think about your programme design priorities.<br><br><b>What matters most to you?</b> (pick up to 3 — I'll ask again for more)`);
+    advOptions(['Career acceleration','Global exposure','Finance & capital skills','Leadership & people skills','Strategy & innovation','Entrepreneurship / startup thinking','Network quality','Travel efficiency (fewer trips)','Cost minimisation','Deep functional expertise']);
+  }
+  else if(step===3){
+    if(!advState.priorities.includes(choice)) advState.priorities.push(choice);
+    if(advState.priorities.length < 3){
+      advMsg('ai', `Got it — <b>${choice}</b> added. Pick another priority (${3-advState.priorities.length} more), or click Done.`);
+      advOptions(['Career acceleration','Global exposure','Finance & capital skills','Leadership & people skills','Strategy & innovation','Entrepreneurship / startup thinking','Network quality','Travel efficiency (fewer trips)','Cost minimisation','Deep functional expertise','→ Done, show my plan']);
+    } else {
+      advState.step = 4;
+      advMsg('ai', `Perfect — your priorities: <b>${advState.priorities.join(', ')}</b>.<br><br><b>How many working days of leave do you have for the EMBA?</b>`);
+      advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
+    }
+  }
+  else if(step===3 && choice==='→ Done, show my plan'){
+    advState.step=4;
+    advMsg('ai',`<b>How many working days of leave do you have for the EMBA?</b>`);
+    advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
+  }
+  else if(step===4){
+    const leaveMap = {'Under 20 days':15,'20–30 days':25,'30–40 days':35,'40–50 days':45,'50+ days / unlimited':60};
+    advState.leave = leaveMap[choice] || 30;
+    advState.step = 5;
+    advMsg('ai', `Noted — approx <b>${advState.leave} days</b>.<br><br><b>Format preference?</b>`);
+    advOptions(['Campus block weeks (intensive, fewer trips)','Regular weekly sessions (spread out)','Blended / online where possible','No preference']);
+  }
+  else if(step===5){
+    advState.format_pref = choice;
+    advState.step = 6;
+    advMsg('ai', `Got it. Last question — <b>how cost-sensitive are you?</b>`);
+    advOptions(['Low — budget is not a constraint','Medium — I want reasonable value','High — minimise flights, hotels, extra costs']);
+  }
+  else if(step===6){
+    advState.cost = choice;
+    advState.step = 7;
+    advBuildPlan();
+  }
 }
 
-function advFormat(text){
-  // Convert markdown-ish to HTML
-  return text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/`(.+?)`/g,'<code>$1</code>')
-    .replace(/^### (.+)$/gm,'<strong style="font-size:13px;color:#c8d5f0">$1</strong>')
-    .replace(/^## (.+)$/gm,'<strong style="font-size:14px;color:#e0e4ef">$1</strong>')
-    .replace(/^- (.+)$/gm,'&nbsp;• $1')
-    .replace(/^(\d+)\. (.+)$/gm,'&nbsp;$1. $2')
-    .replace(/\n\n/g,'<br><br>')
-    .replace(/\n/g,'<br>');
+// Handle "Done" option in step 3
+document.addEventListener('click', e=>{
+  if(e.target.classList.contains('adv-opt') && e.target.textContent==='→ Done, show my plan' && advState.step===3){
+    document.querySelectorAll('.adv-opt').forEach(b=>{ b.disabled=true; b.style.opacity='.4'; });
+    advMsg('user','→ Done, show my plan');
+    advState.step=4;
+    advMsg('ai',`<b>How many working days of leave do you have for the EMBA?</b>`);
+    advOptions(['Under 20 days','20–30 days','30–40 days','40–50 days','50+ days / unlimited']);
+  }
+});
+
+function advBuildPlan(){
+  const role = advState.role;
+  const uniq = advUniqueCourses();
+
+  // Score all courses
+  const scored = Object.values(uniq).map(c=>({...c, score: scoreC(c, role)}))
+    .sort((a,b)=>b.score-a.score);
+
+  const top10 = scored.slice(0,10);
+  const low5  = scored.slice(-5).reverse();
+
+  // Score GE trips
+  const geScored = GE_DB.map(g=>{
+    const key = Object.keys(GE_SCORES).find(k=>g.code && g.code.startsWith(k));
+    const gs = key ? GE_SCORES[key] : {};
+    return {...g, score: gs[role]||3, label: gs.label||g.location, theme_label: gs.theme||g.theme};
+  }).sort((a,b)=>b.score-a.score);
+
+  // Build term coverage
+  const termCount = {AUT:0,SPR:0,SUM:0};
+  top10.forEach(c=>{ (c.terms||[c.term]).forEach(t=>termCount[t]=(termCount[t]||0)+1); });
+
+  // Leave estimate
+  const leaveNeeded = advState.leave < 30 ? 'tight' : advState.leave < 45 ? 'comfortable' : 'generous';
+
+  // Generate plan
+  const planElectives = top10.slice(0,6);
+  const topGE = geScored[0];
+  const altGE = geScored[1];
+
+  let html = `<b style="font-size:14px">📋 Your Personalised EMBA Plan</b><br>
+<span style="color:#8892a4;font-size:11px">Target: ${role} · Industry: ${advState.industry} · Leave: ~${advState.leave} days</span><br><br>`;
+
+  // Top electives table
+  html += `<b>🎯 Top 10 Electives for ${role}</b><br>
+<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:11px">
+<tr style="background:rgba(255,255,255,.1)"><th style="padding:5px 6px;text-align:left">Code</th><th style="padding:5px 6px;text-align:left">Course</th><th style="padding:5px 6px;text-align:left">Stream</th><th style="padding:5px 6px;text-align:left">Term</th><th style="padding:5px 6px;text-align:center">Score</th></tr>`;
+
+  top10.forEach((c,i)=>{
+    const stars = '★'.repeat(Math.round(c.score/2));
+    const bg = i<3 ? 'rgba(99,102,241,.15)' : i<6 ? 'rgba(255,255,255,.04)' : '';
+    html += `<tr style="background:${bg}">
+      <td style="padding:4px 6px;font-weight:600;color:#a5b4fc">${c.code}</td>
+      <td style="padding:4px 6px">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,35)}</td>
+      <td style="padding:4px 6px;color:#8892a4">${c.sa}</td>
+      <td style="padding:4px 6px;color:#8892a4">${(c.terms||[c.term]).join('/')}</td>
+      <td style="padding:4px 6px;text-align:center;color:#fbbf24">${c.score}/10</td>
+    </tr>`;
+  });
+  html += `</table>`;
+
+  // Avoid list
+  html += `<br><b>⚠️ Lower Priority for ${role}</b> <span style="color:#8892a4;font-size:10px">(don't waste elective slots on these)</span><br>
+<span style="color:#64748b;font-size:11px">${low5.map(c=>`${c.code} ${c.name.slice(0,30)} (${c.score}/10)`).join(' · ')}</span><br><br>`;
+
+  // GE recommendation
+  html += `<b>✈️ Global Experience Recommendation</b><br>`;
+  html += `<div style="background:rgba(5,150,105,.15);border:1px solid rgba(5,150,105,.3);border-radius:8px;padding:8px 12px;margin:6px 0;font-size:11.5px">
+    <b style="color:#6ee7b7">🥇 ${topGE.label||topGE.location}</b> — ${topGE.theme_label||topGE.theme}<br>
+    <span style="color:#8892a4">${topGE.dates} · Faculty: ${topGE.faculty}</span><br>
+    <span style="color:#a7f3d0">Relevance for ${role}: ${topGE.score}/5</span>
+  </div>`;
+  if(altGE){
+    html += `<div style="background:rgba(255,255,255,.04);border-radius:8px;padding:8px 12px;margin:4px 0;font-size:11px;color:#8892a4">
+      <b style="color:#c8d5f0">🥈 Alt: ${altGE.label||altGE.location}</b> — ${altGE.theme_label||altGE.theme} (${altGE.score}/5)
+    </div>`;
+  }
+
+  // Suggested plan
+  html += `<br><b>📅 Suggested 6-Elective Plan</b><br>`;
+  html += `<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:11px">
+  <tr style="background:rgba(255,255,255,.1)"><th style="padding:5px 6px;text-align:left">#</th><th style="padding:5px 6px;text-align:left">Course</th><th style="padding:5px 6px;text-align:left">Term</th><th style="padding:5px 6px;text-align:left">Format</th></tr>`;
+  planElectives.forEach((c,i)=>{
+    html += `<tr style="background:${i%2?'rgba(255,255,255,.03)':''}">
+      <td style="padding:4px 6px;color:#a5b4fc">${i+1}</td>
+      <td style="padding:4px 6px;font-weight:500">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,38)}</td>
+      <td style="padding:4px 6px;color:#8892a4">${(c.terms||[c.term]).join('/')}</td>
+      <td style="padding:4px 6px;color:#8892a4;font-size:10px">${(c.formats||[c.format]||[''])[0]}</td>
+    </tr>`;
+  });
+  html += `</table>`;
+
+  // Leave summary
+  const leaveColor = leaveNeeded==='tight'?'#ef4444':leaveNeeded==='comfortable'?'#fbbf24':'#6ee7b7';
+  html += `<br><b>🗓️ Leave Summary</b><br>
+  <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.8">
+    Available: <b>${advState.leave} working days</b><br>
+    Est. for 6 electives: <b>~${advState.leave<30?'18–22':'22–28'} days</b><br>
+    GE trip: <b>~7–8 days</b><br>
+    Remaining buffer: <b style="color:${leaveColor}">${Math.max(0,advState.leave-30)} days</b>
+  </div>`;
+
+  // Format warning
+  if(advState.leave < 25 && advState.format_pref && advState.format_pref.includes('block')){
+    html += `<br><div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 12px;font-size:11px;color:#fca5a5">
+      ⚠️ <b>Leave risk:</b> With ${advState.leave} days, prioritise 5-week or blended formats over block weeks to reduce travel days.
+    </div>`;
+  }
+
+  html += `<br><div style="text-align:center;margin-top:8px">
+    <button onclick="advStart()" style="background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.4);color:#a5b4fc;padding:7px 18px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">↺ Start Over</button>
+    &nbsp;
+    <button onclick="advDeepDive()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;padding:7px 18px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;font-family:'DM Sans',sans-serif">→ Score a specific course</button>
+  </div>`;
+
+  advMsg('ai', html);
 }
 
+function advDeepDive(){
+  advMsg('ai','<b>Which course would you like me to score in detail?</b><br><span style="color:#8892a4;font-size:11px">Type a course code (e.g. E176) or keyword from the name</span>');
+  advInput('e.g. E176 or "private equity"', (val)=>{
+    const q = val.trim().toLowerCase();
+    const uniq = advUniqueCourses();
+    const matches = Object.values(uniq).filter(c=>
+      c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+    ).slice(0,5);
 
-function toggleAdvisor(){
-  advOpen = !advOpen;
-  document.getElementById('advWrap').classList.toggle('open', advOpen);
-  if(advOpen && !advStarted){ advStarted=true; advInit(); }
-  if(advOpen) setTimeout(()=>{ const i=document.getElementById('advInput'); if(i) i.focus(); },100);
+    if(!matches.length){
+      advMsg('ai','No courses matched that search. Try a different code or keyword.');
+      return;
+    }
+    if(matches.length===1){
+      advScoreSingle(matches[0]);
+    } else {
+      advMsg('ai',`Found ${matches.length} matches — which one?`);
+      advOptions(matches.map(c=>`${c.code} — ${c.name.slice(0,40)}`));
+      // override next pick
+      window._advPickOverride = (choice)=>{
+        const code = choice.split(' — ')[0];
+        const c = uniq[code];
+        if(c) advScoreSingle(c);
+        window._advPickOverride = null;
+      };
+    }
+  });
 }
+
+function advScoreSingle(c){
+  const role = advState.role || 'CEO';
+  const allScores = Object.keys(ROLE_STREAM).map(r=>({role:r, score:scoreC(c,r)})).sort((a,b)=>b.score-a.score);
+  const topRoles = allScores.slice(0,3);
+  const botRoles = allScores.slice(-2);
+  const ov = (typeof OVERVIEWS !== 'undefined') ? OVERVIEWS[c.code] : '';
+
+  let html = `<b style="font-size:13px;color:#a5b4fc">${c.code} — ${c.name.replace(/ NEW ELECTIVE.*/,'')}</b><br>
+<span style="color:#8892a4;font-size:11px">${c.sa} · ${(c.terms||[c.term]).join('/')} · ${c.faculty||''}</span><br><br>`;
+
+  html += `<b>Role scores:</b><br>`;
+  allScores.forEach(rs=>{
+    const w = Math.round(rs.score*10);
+    const col = rs.score>=7?'#6ee7b7':rs.score>=5?'#fbbf24':'#f87171';
+    html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11.5px">
+      <span style="width:80px;color:#c8d5f0">${rs.role}</span>
+      <div style="flex:1;background:rgba(255,255,255,.08);border-radius:4px;height:8px">
+        <div style="width:${w}%;background:${col};height:8px;border-radius:4px"></div>
+      </div>
+      <span style="color:${col};width:30px">${rs.score}</span>
+    </div>`;
+  });
+
+  html += `<br><b>Best for:</b> ${topRoles.map(r=>`<span style="color:#6ee7b7">${r.role}</span>`).join(', ')}<br>`;
+  html += `<b>Weaker for:</b> ${botRoles.map(r=>`<span style="color:#f87171">${r.role}</span>`).join(', ')}<br>`;
+
+  if(ov) html += `<br><b>Overview:</b><br><span style="color:#8892a4;font-size:11px">${ov.slice(0,300)}${ov.length>300?'…':''}</span>`;
+
+  html += `<br><br><button onclick="advDeepDive()" style="background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.4);color:#a5b4fc;padding:6px 14px;border-radius:8px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif">Score another course</button>`;
+
+  advMsg('ai', html);
+}
+
+// Override advPick for deep dive multi-match
+const _origAdvPick = advPick;
+function advPick(choice){
+  if(window._advPickOverride){ window._advPickOverride(choice); return; }
+  _origAdvPick(choice);
+}
+
 </script>
 
 <!-- MY ADVISOR FAB + PANEL -->
@@ -1221,7 +1238,7 @@ function toggleAdvisor(){
       <div class="adv-head-status">Online · Powered by Claude</div>
 
     </div>
-    <button onclick="advClearKey()" title="Reset API key" style="background:none;border:none;color:#475569;cursor:pointer;font-size:14px;padding:4px;line-height:1;margin-right:2px">⚙</button>
+    <button onclick="advStart()" title="Start over" style="background:none;border:none;color:#475569;cursor:pointer;font-size:13px;padding:4px;line-height:1;margin-right:2px" title="Restart">↺</button>
     <button class="adv-close" onclick="toggleAdvisor()">✕</button>
   </div>
   <div class="adv-msgs" id="advMsgs"></div>
