@@ -120,6 +120,52 @@ h1 em{font-style:italic;color:var(--ge)}
 #view-gantt.active{display:block}
 #view-timeline{display:none}
 #view-timeline.active{display:block}
+#view-builder{display:none}
+#view-builder.active{display:block}
+/* ── PLAN BUILDER ──────────────────────────────────────────────────── */
+.pb-wrap{display:flex;gap:16px;padding:8px 0;align-items:flex-start}
+.pb-palette{flex:0 0 320px;background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:14px;max-height:72vh;overflow-y:auto;position:sticky;top:8px}
+.pb-palette h3{font-size:12px;font-weight:600;color:var(--tx2);margin:0 0 10px;letter-spacing:.04em;text-transform:uppercase}
+.pb-search{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--bdr);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--tx1);font-family:'DM Sans',sans-serif;outline:none;margin-bottom:10px;box-sizing:border-box}
+.pb-search:focus{border-color:rgba(99,102,241,.5)}
+.pb-filter-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.pb-fpill{font-size:10px;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--bdr);color:var(--tx3);cursor:pointer;transition:all .15s}
+.pb-fpill.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pb-card{background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-left:3px solid var(--accent);border-radius:6px;padding:7px 10px;margin-bottom:6px;cursor:grab;transition:all .15s;user-select:none}
+.pb-card:hover{background:rgba(255,255,255,.08);transform:translateX(2px)}
+.pb-card:active{cursor:grabbing}
+.pb-card.dragging{opacity:.4}
+.pb-card-code{font-size:10px;font-weight:700;color:#a5b4fc}
+.pb-card-name{font-size:11.5px;color:var(--tx1);line-height:1.3;margin:2px 0}
+.pb-card-meta{font-size:9.5px;color:var(--tx3)}
+.pb-board{flex:1;display:flex;flex-direction:column;gap:14px}
+.pb-stats{display:flex;gap:10px;flex-wrap:wrap}
+.pb-stat{flex:1;min-width:130px;background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:11px 14px}
+.pb-stat-label{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.pb-stat-value{font-size:22px;font-weight:700;color:var(--tx1);line-height:1}
+.pb-stat-sub{font-size:10px;color:var(--tx3);margin-top:3px}
+.pb-terms{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.pb-term-col{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:12px;min-height:200px;transition:all .2s}
+.pb-term-col.drag-over{border-color:var(--accent);background:rgba(99,102,241,.08)}
+.pb-term-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bdr)}
+.pb-term-title{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.pb-term-dot{width:8px;height:8px;border-radius:50%}
+.pb-term-count{font-size:10px;color:var(--tx3);background:rgba(255,255,255,.06);padding:2px 8px;border-radius:10px}
+.pb-slot{background:rgba(255,255,255,.04);border:1px solid var(--bdr);border-radius:7px;padding:7px 9px;margin-bottom:6px;position:relative;border-left:3px solid var(--accent)}
+.pb-slot-code{font-size:10px;font-weight:700;color:#a5b4fc}
+.pb-slot-name{font-size:11px;color:var(--tx1);line-height:1.3;padding-right:18px}
+.pb-slot-meta{font-size:9px;color:var(--tx3);margin-top:2px}
+.pb-slot-rm{position:absolute;top:6px;right:7px;width:16px;height:16px;border-radius:50%;background:rgba(239,68,68,.2);color:#f87171;border:none;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.pb-slot-rm:hover{background:rgba(239,68,68,.4)}
+.pb-empty{text-align:center;color:var(--tx3);font-size:11px;padding:30px 10px;border:2px dashed var(--bdr);border-radius:8px}
+.pb-conflict{border-left-color:#f87171 !important;background:rgba(239,68,68,.08) !important}
+.pb-warn{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 12px;font-size:11px;color:#fca5a5;margin-top:4px}
+.pb-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pb-btn{background:rgba(255,255,255,.06);border:1px solid var(--bdr);color:var(--tx2);padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;transition:all .15s}
+.pb-btn:hover{background:rgba(255,255,255,.1);color:var(--tx1)}
+.pb-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pb-btn.primary:hover{opacity:.9}
+@media(max-width:860px){.pb-wrap{flex-direction:column}.pb-palette{flex:1;width:100%;position:static;max-height:none}.pb-terms{grid-template-columns:1fr}}
 /* ── TIMELINE SCROLLABLE ────────────────────────────────────────────── */
 .tl-outer{overflow-x:auto;padding-bottom:16px}
 .tl-grid{position:relative}
@@ -203,10 +249,19 @@ h1 em{font-style:italic;color:var(--ge)}
     <span class="pill" data-v="EC">Economics</span>
     <span class="pill" data-v="MSO">Mgmt Sci & Ops</span>
   </div>
+  <span class="ctrl-lbl" style="margin-left:14px">Format</span>
+  <div class="filters" id="ff">
+    <span class="pill fmt-pill on" data-f="ALL">All</span>
+    <span class="pill fmt-pill" data-f="BW">Block weeks</span>
+    <span class="pill fmt-pill" data-f="FIVE_W">5-wk / Regular</span>
+    <span class="pill fmt-pill" data-f="DUBAI">Dubai</span>
+    <span class="pill fmt-pill" data-f="BLENDED">Blended</span>
+  </div>
   <div style="flex:1"></div>
   <div class="view-switch">
     <button class="vs-btn on" id="vs-gantt" onclick="switchView('gantt')">Term View</button>
     <button class="vs-btn" id="vs-timeline" onclick="switchView('timeline')">Timeline View</button>
+    <button class="vs-btn" id="vs-builder" onclick="switchView('builder')">Plan Builder</button>
   </div>
 </div>
 
@@ -224,6 +279,7 @@ h1 em{font-style:italic;color:var(--ge)}
 
 <div id="view-gantt" class="active"><div class="content" id="cal"></div></div>
 <div id="view-timeline"></div>
+<div id="view-builder"></div>
 
 <!-- DETAIL PANEL -->
 <div class="panel-overlay" id="ov" onclick="closePanel()"></div>
@@ -263,6 +319,14 @@ function fmtType(c){
   if(f.includes('irregular')) return 'IRREGULAR';
   if(f.includes('block week')) return 'BW';
   return 'FIVE_W';
+}
+// True if ANY session of this course code matches the given format type
+function courseHasFmt(code, fmt){
+  return COURSE_DB.some(c=>c.code===code && fmtType(c)===fmt);
+}
+// Map a format string to its type (for aggregated course.formats arrays)
+function fmtTypeFromString(fstr){
+  return fmtType({format:fstr, delivery:''});
 }
 function styleBar(el,c){
   const type=fmtType(c);
@@ -377,9 +441,389 @@ function hideHtt(){document.getElementById('htt').style.display='none';}
 function switchView(v){
   document.getElementById('view-gantt').classList.toggle('active', v==='gantt');
   document.getElementById('view-timeline').classList.toggle('active', v==='timeline');
+  document.getElementById('view-builder').classList.toggle('active', v==='builder');
   document.getElementById('vs-gantt').classList.toggle('on', v==='gantt');
   document.getElementById('vs-timeline').classList.toggle('on', v==='timeline');
+  document.getElementById('vs-builder').classList.toggle('on', v==='builder');
   if(v==='timeline') buildTimeline();
+  if(v==='builder') buildPlanBuilder();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PLAN BUILDER — drag & drop course shortlist
+// ══════════════════════════════════════════════════════════════════════
+let pbPlan = { AUT:[], SPR:[], SUM:[] };
+let pbFilter = 'ALL';
+let pbFmtFilter = 'ALL';
+let pbSearch = '';
+
+function pbLeaveDays(c){
+  const f = (c.format||'').toLowerCase();
+  if(f.includes('block week')||f.includes('dubai')) return 5;
+  if(f.includes('blended')) return 2;
+  if(f.includes('irregular')) return 3;
+  if(f.includes('5 week')) return 4;
+  if(f.includes('day')||f.includes('eve')) return 3;
+  return 4;
+}
+
+function pbLoadSaved(){
+  try{ const s=localStorage.getItem('embalj_plan'); if(s) pbPlan=JSON.parse(s); }
+  catch(e){ pbPlan={AUT:[],SPR:[],SUM:[]}; }
+}
+function pbSave(){ try{ localStorage.setItem('embalj_plan', JSON.stringify(pbPlan)); }catch(e){} }
+
+function buildPlanBuilder(){
+  pbLoadSaved();
+  const el = document.getElementById('view-builder');
+  el.innerHTML = `
+    <div class="pb-wrap">
+      <div class="pb-palette">
+        <h3>📚 Course Library</h3>
+        <input class="pb-search" id="pbSearch" placeholder="Search courses…" oninput="pbOnSearch(this.value)" />
+        <div class="pb-filter-row" id="pbFilters"></div>
+        <div id="pbCards"></div>
+      </div>
+      <div class="pb-board">
+        <div class="pb-stats" id="pbStats"></div>
+        <div class="pb-actions">
+          <button class="pb-btn primary" onclick="pbExport()">⬇ Export plan</button>
+          <button class="pb-btn" onclick="pbImport()">⬆ Import plan</button>
+          <button class="pb-btn" onclick="pbClear()">🗑 Clear all</button>
+          <button class="pb-btn" onclick="pbAutoFill()">✨ Suggest from Advisor role</button>
+        </div>
+        <div class="pb-terms" id="pbTerms"></div>
+        <div id="pbTimeline"></div>
+      </div>
+    </div>
+    <input type="file" id="pbFile" accept=".json" style="display:none" onchange="pbHandleFile(event)" />
+  `;
+  pbRenderFilters(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+}
+
+function pbRenderFilters(){
+  const streams = ['ALL','MKT','FIN','AC','OB','SE','EC','MSO'];
+  const labels = {ALL:'All',MKT:'Marketing',FIN:'Finance',AC:'Accounting',OB:'Org Behav',SE:'Strategy',EC:'Economics',MSO:'Mgmt Sci'};
+  const fmts = [['ALL','All formats'],['BW','Block weeks'],['FIVE_W','5-wk / Reg'],['DUBAI','Dubai'],['BLENDED','Blended']];
+  document.getElementById('pbFilters').innerHTML =
+    streams.map(s=>`<span class="pb-fpill ${s===pbFilter?'on':''}" onclick="pbSetFilter('${s}')">${labels[s]}</span>`).join('')
+    + '<div style="flex-basis:100%;height:6px"></div>'
+    + fmts.map(([f,l])=>`<span class="pb-fpill ${f===pbFmtFilter?'on':''}" style="${f===pbFmtFilter?'background:#2563EB;border-color:#2563EB':''}" onclick="pbSetFmtFilter('${f}')">${l}</span>`).join('');
+}
+function pbSetFilter(s){ pbFilter=s; pbRenderFilters(); pbRenderCards(); }
+function pbSetFmtFilter(f){ pbFmtFilter=f; pbRenderFilters(); pbRenderCards(); }
+function pbOnSearch(v){ pbSearch=v.toLowerCase(); pbRenderCards(); }
+
+function pbRenderCards(){
+  const uniq = advUniqueCourses();
+  const placed = new Set([...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM]);
+  let list = Object.values(uniq).filter(c=>{
+    if(placed.has(c.code)) return false;
+    if(pbFilter!=='ALL' && !c.sa.includes(pbFilter)) return false;
+    if(pbFmtFilter!=='ALL' && !courseHasFmt(c.code, pbFmtFilter)) return false;
+    if(pbSearch && !(c.name.toLowerCase().includes(pbSearch)||c.code.toLowerCase().includes(pbSearch))) return false;
+    return true;
+  }).sort((a,b)=>a.name.localeCompare(b.name));
+  const wrap = document.getElementById('pbCards');
+  if(!list.length){ wrap.innerHTML='<div class="pb-empty">No matching courses</div>'; return; }
+  wrap.innerHTML = list.map(c=>{
+    // If a format filter is active, surface the matching session's details
+    let sess = c, fmtLabel = (c.formats||[c.format]||[''])[0];
+    if(pbFmtFilter!=='ALL'){
+      const match = COURSE_DB.find(x=>x.code===c.code && fmtType(x)===pbFmtFilter);
+      if(match){ sess = match; fmtLabel = match.format; }
+    }
+    const col = FMT_COL[fmtType(sess)]||'#64748b';
+    const terms = pbFmtFilter!=='ALL' ? sess.term : (c.terms||[c.term]).join('/');
+    return `<div class="pb-card" draggable="true" data-code="${c.code}" style="border-left-color:${col}"
+      ondragstart="pbDragStart(event,'${c.code}')" ondragend="pbDragEnd(event)">
+      <div class="pb-card-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa} · ${terms}</span></div>
+      <div class="pb-card-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,42)}</div>
+      <div class="pb-card-meta">${fmtLabel} · ~${pbLeaveDays(sess)} leave days</div>
+    </div>`;
+  }).join('');
+}
+
+let pbDragCode = null;
+function pbDragStart(e, code){ pbDragCode=code; e.dataTransfer.effectAllowed='move'; e.target.classList.add('dragging'); }
+function pbDragEnd(e){ e.target.classList.remove('dragging'); document.querySelectorAll('.pb-term-col').forEach(c=>c.classList.remove('drag-over')); }
+
+function pbRenderTerms(){
+  const terms = [
+    {key:'AUT', label:'Autumn 2026', col:'#3b82f6'},
+    {key:'SPR', label:'Spring 2027', col:'#10b981'},
+    {key:'SUM', label:'Summer 2027', col:'#f97316'},
+  ];
+  const uniq = advUniqueCourses();
+  document.getElementById('pbTerms').innerHTML = terms.map(t=>{
+    const codes = pbPlan[t.key]||[];
+    const slots = codes.map(code=>{
+      const c = uniq[code]; if(!c) return '';
+      const col = FMT_COL[fmtType(c)]||'#64748b';
+      const conflict = pbHasConflict(code, t.key);
+      return `<div class="pb-slot ${conflict?'pb-conflict':''}" style="border-left-color:${col}">
+        <button class="pb-slot-rm" onclick="pbRemove('${t.key}','${code}')">×</button>
+        <div class="pb-slot-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa}</span></div>
+        <div class="pb-slot-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,40)}</div>
+        <div class="pb-slot-meta">${(c.formats||[c.format]||[''])[0]} · ~${pbLeaveDays(c)} days${conflict?' · ⚠ overlaps':''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="pb-term-col" data-term="${t.key}"
+      ondragover="pbDragOver(event,'${t.key}')" ondragleave="pbDragLeave(event)" ondrop="pbDrop(event,'${t.key}')">
+      <div class="pb-term-head">
+        <div class="pb-term-title"><span class="pb-term-dot" style="background:${t.col}"></span>${t.label}</div>
+        <span class="pb-term-count">${codes.length}</span>
+      </div>
+      ${slots || '<div class="pb-empty">Drag courses here</div>'}
+    </div>`;
+  }).join('');
+}
+
+function pbDragOver(e, term){ e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function pbDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
+function pbDrop(e, term){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!pbDragCode) return;
+  const uniq = advUniqueCourses();
+  const c = uniq[pbDragCode];
+  if(!c){ pbDragCode=null; return; }
+  const offered = (c.terms||[c.term]);
+  if(!offered.includes(term)){
+    pbToast(`${c.code} runs in ${offered.join('/')}, not this term`);
+    pbDragCode=null; return;
+  }
+  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t]=pbPlan[t].filter(x=>x!==pbDragCode); });
+  if(!pbPlan[term].includes(pbDragCode)) pbPlan[term].push(pbDragCode);
+  pbDragCode=null;
+  pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+}
+
+function pbRemove(term, code){
+  pbPlan[term] = pbPlan[term].filter(x=>x!==code);
+  pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+}
+
+function pbHasConflict(code, term){
+  const uniq = advUniqueCourses();
+  const c = uniq[code]; if(!c) return false;
+  const d1 = extractDates(c); if(!d1) return false;
+  return pbPlan[term].some(other=>{
+    if(other===code) return false;
+    const oc = uniq[other]; if(!oc) return false;
+    const d2 = extractDates(oc); if(!d2) return false;
+    return d1.start <= d2.end && d2.start <= d1.end;
+  });
+}
+
+function pbRenderStats(){
+  const uniq = advUniqueCourses();
+  const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
+  let totalLeave = 0, conflicts = 0;
+  all.forEach(code=>{ const c=uniq[code]; if(c) totalLeave += pbLeaveDays(c); });
+  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ if(pbHasConflict(code,t)) conflicts++; }); });
+  conflicts = Math.floor(conflicts/2);
+  const dist = {AUT:pbPlan.AUT.length, SPR:pbPlan.SPR.length, SUM:pbPlan.SUM.length};
+  const maxT = Math.max(dist.AUT,dist.SPR,dist.SUM,1);
+  document.getElementById('pbStats').innerHTML = `
+    <div class="pb-stat"><div class="pb-stat-label">Courses selected</div><div class="pb-stat-value">${all.length}</div><div class="pb-stat-sub">across 3 terms</div></div>
+    <div class="pb-stat"><div class="pb-stat-label">Est. leave days</div><div class="pb-stat-value" style="color:${totalLeave>40?'#f87171':totalLeave>25?'#fbbf24':'#6ee7b7'}">${totalLeave}</div><div class="pb-stat-sub">working days away</div></div>
+    <div class="pb-stat"><div class="pb-stat-label">Term balance</div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:2px">
+        ${['AUT','SPR','SUM'].map((t,i)=>{const cols=['#3b82f6','#10b981','#f97316'];const h=Math.max(4,dist[t]/maxT*26);return `<div style="flex:1;background:${cols[i]};height:${h}px;border-radius:2px"></div>`;}).join('')}
+      </div>
+      <div class="pb-stat-sub">A ${dist.AUT} · S ${dist.SPR} · Su ${dist.SUM}</div></div>
+    <div class="pb-stat"><div class="pb-stat-label">Schedule conflicts</div><div class="pb-stat-value" style="color:${conflicts?'#f87171':'#6ee7b7'}">${conflicts}</div><div class="pb-stat-sub">${conflicts?'overlapping dates':'no clashes'}</div></div>
+  `;
+  if(conflicts){
+    const w=document.createElement('div'); w.className='pb-warn'; w.style.cssText='flex-basis:100%';
+    w.innerHTML=`⚠️ ${conflicts} pair${conflicts>1?'s':''} of courses overlap in dates — highlighted in red.`;
+    document.getElementById('pbStats').appendChild(w);
+  }
+}
+
+function pbToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1c2030;border:1px solid rgba(99,102,241,.4);color:#c8d5f0;padding:10px 18px;border-radius:10px;font-size:12px;z-index:600;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+  t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
+}
+
+function pbClear(){ if(!confirm('Clear all selected courses?')) return; pbPlan={AUT:[],SPR:[],SUM:[]}; pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
+
+function pbExport(){
+  const uniq=advUniqueCourses();
+  const data={generated:new Date().toISOString(),plan:pbPlan,detail:{}};
+  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];return c?{code:c.code,name:c.name,sa:c.sa,format:(c.formats||[c.format])[0],leaveDays:pbLeaveDays(c)}:{code};}); });
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='my-embalj-plan.json'; a.click(); URL.revokeObjectURL(url);
+}
+
+function pbImport(){ document.getElementById('pbFile').click(); }
+function pbHandleFile(e){
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.plan&&d.plan.AUT){pbPlan=d.plan;pbSave();buildPlanBuilder();pbToast('Plan imported ✓');} }catch(err){ pbToast('Could not read that file'); } };
+  r.readAsText(file);
+}
+
+function pbAutoFill(){
+  const role=advState.role;
+  if(!role){ pbToast('Open My Advisor first and pick a target role'); return; }
+  const uniq=advUniqueCourses();
+  const scored=Object.values(uniq).map(c=>({...c,score:scoreC(c,role)})).sort((a,b)=>b.score-a.score);
+  pbPlan={AUT:[],SPR:[],SUM:[]}; let added=0;
+  for(const c of scored){
+    if(added>=6) break;
+    const offered=(c.terms||[c.term]); let placed=false;
+    for(const t of offered){
+      const d1=extractDates(c);
+      const clash=d1&&pbPlan[t].some(oc=>{const o=uniq[oc];const d2=o&&extractDates(o);return d2&&d1.start<=d2.end&&d2.start<=d1.end;});
+      if(!clash){ pbPlan[t].push(c.code); placed=true; added++; break; }
+    }
+    if(!placed&&offered.length){ pbPlan[offered[0]].push(c.code); added++; }
+  }
+  pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+  pbToast(`Suggested ${added} courses for ${role} ✓`);
+}
+
+// ── MY PICKS TIMELINE (in Plan Builder) ───────────────────────────────
+function pbRenderTimeline(){
+  const host = document.getElementById('pbTimeline');
+  if(!host) return;
+  const uniq = advUniqueCourses();
+  const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
+
+  if(!all.length){ host.innerHTML=''; return; }
+
+  // Build list of {code,name,start,end,term,fmt,col,leaveDays} for courses with dates
+  const TL_START=new Date('2026-10-12'), TL_END=new Date('2027-07-02');
+  const totalMs=TL_END-TL_START;
+  const items=[];
+  ['AUT','SPR','SUM'].forEach(t=>{
+    pbPlan[t].forEach(code=>{
+      const c=uniq[code]; if(!c) return;
+      // find the session matching this term for accurate dates
+      const sess = COURSE_DB.find(x=>x.code===code && x.term===t) || c;
+      const d=extractDates(sess);
+      if(!d) return;
+      items.push({code, name:c.name, start:d.start, end:d.end, term:t,
+        fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess)});
+    });
+  });
+  if(!items.length){ host.innerHTML='<div class="pb-empty" style="margin-top:14px">Selected courses have no fixed dates to plot (blended/irregular).</div>'; return; }
+  items.sort((a,b)=>a.start-b.start);
+
+  // ── Compute insights ──
+  // total weeks away = sum of (end-start) in weeks (approx leave); also unique calendar coverage
+  let totalLeaveDays = items.reduce((s,i)=>s+i.leaveDays,0);
+  const totalWeeksAway = (totalLeaveDays/5).toFixed(1);
+
+  // overlaps
+  const overlaps=[];
+  for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++){
+    if(items[i].start<=items[j].end && items[j].start<=items[i].end)
+      overlaps.push([items[i].code, items[j].code]);
+  }
+
+  // trip-combining: block-week courses whose dates are within 7 days of each other
+  const combos=[];
+  const blocks = items.filter(i=>i.fmt==='BW'||i.fmt==='DUBAI');
+  for(let i=0;i<blocks.length;i++) for(let j=i+1;j<blocks.length;j++){
+    const gap = Math.abs(blocks[j].start - blocks[i].end)/86400000;
+    const gap2 = Math.abs(blocks[i].start - blocks[j].end)/86400000;
+    const minGap = Math.min(gap, gap2);
+    if(minGap<=10 && !(blocks[i].start<=blocks[j].end && blocks[j].start<=blocks[i].end)){
+      combos.push([blocks[i].code, blocks[j].code, Math.round(minGap)]);
+    }
+  }
+
+  // gaps between consecutive blocks
+  const sortedBlocks=[...blocks].sort((a,b)=>a.start-b.start);
+
+  const W = Math.max(700, (host.clientWidth||800));
+  const TLW = W - 40;
+  const rowH = 30;
+
+  // ── Render ──
+  let html = `<div style="margin-top:18px;background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <h3 style="font-size:13px;font-weight:600;color:var(--tx1);margin:0;letter-spacing:.03em">📍 My Picks Timeline</h3>
+      <div style="display:flex;gap:14px;font-size:11px;color:var(--tx3)">
+        <span>🗓️ <b style="color:var(--tx1)">${totalWeeksAway}</b> weeks away (~${totalLeaveDays} leave days)</span>
+        <span>⚠️ <b style="color:${overlaps.length?'#f87171':'#6ee7b7'}">${overlaps.length}</b> overlap${overlaps.length!==1?'s':''}</span>
+        <span>🔗 <b style="color:${combos.length?'#fbbf24':'var(--tx3)'}">${combos.length}</b> trip combo${combos.length!==1?'s':''}</span>
+      </div>
+    </div>`;
+
+  // term band header
+  const TERM_BANDS=[
+    {s:'2026-10-12',e:'2026-12-22',col:'#3b82f6',label:'Autumn'},
+    {s:'2027-01-04',e:'2027-03-28',col:'#10b981',label:'Spring'},
+    {s:'2027-03-22',e:'2027-07-02',col:'#f97316',label:'Summer'},
+  ];
+  html += `<div style="position:relative;height:18px;margin-bottom:4px">`;
+  TERM_BANDS.forEach(tb=>{
+    const lx=(new Date(tb.s)-TL_START)/totalMs*TLW;
+    const wd=(new Date(tb.e)-new Date(tb.s))/totalMs*TLW;
+    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;font-size:9px;font-weight:700;color:${tb.col};opacity:.8;letter-spacing:.05em;text-transform:uppercase">${tb.label}</div>`;
+  });
+  html += `</div>`;
+
+  // constraint bands
+  html += `<div style="position:relative;width:${TLW}px;height:${items.length*rowH+10}px;background:rgba(255,255,255,.015);border-radius:8px;overflow:hidden">`;
+  // term background tints
+  TERM_BANDS.forEach(tb=>{
+    const lx=(new Date(tb.s)-TL_START)/totalMs*TLW;
+    const wd=(new Date(tb.e)-new Date(tb.s))/totalMs*TLW;
+    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${tb.col};opacity:.04"></div>`;
+  });
+  // religious constraint markers
+  CONSTRAINT_DATES.forEach(cd=>{
+    const cs=new Date(cd.s),ce=new Date(cd.e);
+    const lx=(cs-TL_START)/totalMs*TLW;
+    const wd=Math.max(2,(ce-cs)/totalMs*TLW);
+    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${cd.col};opacity:.12;border-left:1px dashed ${cd.col}88;border-right:1px dashed ${cd.col}88" title="${cd.label}"></div>`;
+  });
+
+  // course bars
+  items.forEach((it,i)=>{
+    const lx=Math.max(0,(it.start-TL_START)/totalMs*TLW);
+    const wd=Math.max(20,(it.end-it.start+86400000)/totalMs*TLW);
+    const isOverlap = overlaps.some(o=>o.includes(it.code));
+    const isCombo = combos.some(c=>c.includes(it.code));
+    const top = i*rowH+5;
+    let border = isOverlap?'2px solid #f87171':isCombo?'2px solid #fbbf24':'none';
+    html+=`<div style="position:absolute;left:${lx}px;top:${top}px;width:${wd}px;height:20px;background:${it.col};border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;box-shadow:${border==='none'?'none':'0 0 0 '+border};box-sizing:border-box" title="${it.name} (${it.code})">${it.code}</div>`;
+  });
+  html += `</div>`;
+
+  // insight callouts
+  if(combos.length){
+    html += `<div style="margin-top:12px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#fcd34d">
+      <b>🔗 Trip-combining opportunities</b> — these block weeks are close enough to combine into one trip (saving flights & travel days):<br>
+      ${combos.map(c=>`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(251,191,36,.15);padding:2px 8px;border-radius:10px">${c[0]} + ${c[1]} <span style="opacity:.7">(${c[2]}d apart)</span></span>`).join('')}
+    </div>`;
+  }
+  if(overlaps.length){
+    html += `<div style="margin-top:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#fca5a5">
+      <b>⚠️ Date overlaps</b> — you can't attend both of these at once:<br>
+      ${overlaps.map(o=>`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(239,68,68,.15);padding:2px 8px;border-radius:10px">${o[0]} ↔ ${o[1]}</span>`).join('')}
+    </div>`;
+  }
+
+  // gaps between blocks
+  if(sortedBlocks.length>1){
+    let gapHtml='';
+    for(let i=0;i<sortedBlocks.length-1;i++){
+      const gapDays=Math.round((sortedBlocks[i+1].start - sortedBlocks[i].end)/86400000);
+      if(gapDays>0) gapHtml+=`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(255,255,255,.06);padding:2px 8px;border-radius:10px">${sortedBlocks[i].code}→${sortedBlocks[i+1].code}: <b>${gapDays}d</b></span>`;
+    }
+    if(gapHtml) html += `<div style="margin-top:8px;font-size:11px;color:var(--tx3)"><b style="color:var(--tx2)">⏱️ Gaps between block weeks:</b><br>${gapHtml}</div>`;
+  }
+
+  html += `</div>`;
+  host.innerHTML = html;
 }
 
 function buildTimeline(){
@@ -403,6 +847,7 @@ function buildTimeline(){
   const byCode=new Map();
   COURSE_DB.forEach(c=>{
     if(active!=='ALL'&&!c.sa.includes(active)) return;
+    if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
     if(!byCode.has(c.code)) byCode.set(c.code,[]);
     byCode.get(c.code).push(c);
   });
@@ -561,7 +1006,7 @@ function buildTimeline(){
   el.appendChild(outer);
 }
 
-let active='ALL', activeBarEl=null;
+let active='ALL', activeFmt='ALL', activeBarEl=null;
 const LBLW=140, W=680;
 
 function fmtD(ds){return new Date(ds).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
@@ -590,6 +1035,7 @@ function build(){
     COURSE_DB.forEach(c=>{
       if(c.term!==ph.term) return;
       if(active!=='ALL'&&!c.sa.includes(active)) return;
+      if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
       const key=c.code+'|'+c.term;
       if(!groupMap.has(key)) groupMap.set(key,[]);
       groupMap.get(key).push(c);
@@ -893,9 +1339,14 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape') closePanel();});
 
 document.getElementById('sf').addEventListener('click',e=>{
   const p=e.target.closest('.pill'); if(!p) return;
-  document.querySelectorAll('.pill').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('#sf .pill').forEach(x=>x.classList.remove('on'));
   p.classList.add('on'); active=p.dataset.v; build();
-  // Rebuild timeline if it's currently visible
+  if(document.getElementById('view-timeline').classList.contains('active')) buildTimeline();
+});
+document.getElementById('ff').addEventListener('click',e=>{
+  const p=e.target.closest('.pill'); if(!p) return;
+  document.querySelectorAll('#ff .pill').forEach(x=>x.classList.remove('on'));
+  p.classList.add('on'); activeFmt=p.dataset.f; build();
   if(document.getElementById('view-timeline').classList.contains('active')) buildTimeline();
 });
 
@@ -963,7 +1414,13 @@ Pick an option below, or just <b>type naturally</b> at the bottom anytime (e.g. 
 
 function advUniqueCourses(){
   const map = {};
-  COURSE_DB.forEach(c=>{ if(!map[c.code]) map[c.code]=c; });
+  COURSE_DB.forEach(c=>{
+    if(!map[c.code]){
+      map[c.code] = Object.assign({}, c, {terms:[], formats:[]});
+    }
+    if(!map[c.code].terms.includes(c.term)) map[c.code].terms.push(c.term);
+    if(c.format && !map[c.code].formats.includes(c.format)) map[c.code].formats.push(c.format);
+  });
   return map;
 }
 
