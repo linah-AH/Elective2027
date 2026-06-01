@@ -500,6 +500,13 @@ let pbFilter = 'ALL';
 let pbFmtFilter = 'ALL';
 let pbSearch = '';
 
+function pbCredits(c){
+  const s = c && c.sessions;
+  if(s===10) return 11;
+  if(s===5) return 6;
+  if(typeof s==='number') return s+1;  // general rule: sessions + 1
+  return 0;
+}
 function pbLeaveDays(c){
   const f = (c.format||'').toLowerCase();
   if(f.includes('block week')||f.includes('dubai')) return 5;
@@ -601,9 +608,10 @@ function pbRenderCards(){
       return `<span style="display:inline-block;font-size:8.5px;font-weight:600;padding:1px 6px;border-radius:8px;margin-right:3px;background:${active?bcol:'transparent'}22;color:${active?bcol:'#475569'};border:1px solid ${active?bcol+'66':'#33415544'}">${FMT_BADGE[ft]||ft}</span>`;
     }).join('');
     const multi = fmtTypes.length>1 ? '<span style="font-size:8.5px;color:#fbbf24;margin-left:2px">⇄ choose date</span>' : '';
+    const cr = pbCredits(sess);
     return `<div class="pb-card" draggable="true" data-code="${c.code}" style="border-left-color:${col}"
       ondragstart="pbDragStart(event,'${c.code}')" ondragend="pbDragEnd(event)">
-      <div class="pb-card-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa} · ${terms}</span></div>
+      <div class="pb-card-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa} · ${terms}</span> <span style="float:right;color:#a5b4fc;font-weight:600">${cr} cr</span></div>
       <div class="pb-card-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,42)}</div>
       <div class="pb-card-meta" style="margin-top:3px">${badges}${multi}</div>
     </div>`;
@@ -654,7 +662,7 @@ function pbRenderTerms(){
         <button class="pb-slot-rm" onclick="pbRemove('${t.key}','${code}')">×</button>
         <div class="pb-slot-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa}</span></div>
         <div class="pb-slot-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,40)}</div>
-        <div class="pb-slot-meta">${sess.format||''} · ~${pbLeaveDays(sess)} days${conflict?' · ⚠ overlaps':''}</div>
+        <div class="pb-slot-meta">${sess.format||''} · ~${pbLeaveDays(sess)} days · ${pbCredits(sess)} cr${conflict?' · ⚠ overlaps':''}</div>
       </div>`;
     }).join('');
     // GE trips for this term
@@ -799,14 +807,15 @@ function pbRenderStats(){
   const uniq = advUniqueCourses();
   const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
   const allGE = [...pbGEPlan.AUT,...pbGEPlan.SPR,...pbGEPlan.SUM];
-  let totalLeave = 0, conflicts = 0;
-  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ const s=pbGetSession(code,t); if(s) totalLeave += pbLeaveDays(s); }); });
+  let totalLeave = 0, conflicts = 0, totalCredits = 0;
+  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ const s=pbGetSession(code,t); if(s){ totalLeave += pbLeaveDays(s); totalCredits += pbCredits(s); } }); });
   totalLeave += allGE.length * 7;  // ~7 leave days per GE trip
   ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ if(pbHasConflict(code,t)) conflicts++; }); });
   conflicts = Math.floor(conflicts/2);
   const dist = {AUT:pbPlan.AUT.length, SPR:pbPlan.SPR.length, SUM:pbPlan.SUM.length};
   const maxT = Math.max(dist.AUT,dist.SPR,dist.SUM,1);
   document.getElementById('pbStats').innerHTML = `
+    <div class="pb-stat" style="border-color:rgba(99,102,241,.4)"><div class="pb-stat-label">Total credits</div><div class="pb-stat-value" style="color:#a5b4fc">${totalCredits}</div><div class="pb-stat-sub">from ${all.length} course${all.length!==1?'s':''}</div></div>
     <div class="pb-stat"><div class="pb-stat-label">Selected</div><div class="pb-stat-value">${all.length}<span style="font-size:13px;color:var(--tx3)"> + ${allGE.length}✈️</span></div><div class="pb-stat-sub">${all.length} courses · ${allGE.length} trips</div></div>
     <div class="pb-stat"><div class="pb-stat-label">Est. leave days</div><div class="pb-stat-value" style="color:${totalLeave>40?'#f87171':totalLeave>25?'#fbbf24':'#6ee7b7'}">${totalLeave}</div><div class="pb-stat-sub">working days away</div></div>
     <div class="pb-stat"><div class="pb-stat-label">Term balance</div>
@@ -834,7 +843,10 @@ function pbClear(){ if(!confirm('Clear all selected courses?')) return; pbPlan={
 function pbExport(){
   const uniq=advUniqueCourses();
   const data={generated:new Date().toISOString(),plan:pbPlan,detail:{}};
-  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];const s=pbGetSession(code,t);return c?{code:c.code,name:c.name,sa:c.sa,format:s?s.format:(c.formats||[c.format])[0],leaveDays:pbLeaveDays(s||c)}:{code};}); });
+  let exportCredits=0;
+  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];const s=pbGetSession(code,t);const cr=pbCredits(s||c);exportCredits+=cr;return c?{code:c.code,name:c.name,sa:c.sa,format:s?s.format:(c.formats||[c.format])[0],sessions:(s||c).sessions,credits:cr,leaveDays:pbLeaveDays(s||c)}:{code};}); });
+  data.totalCredits = exportCredits;
+  data.geTrips = {AUT:pbGEPlan.AUT,SPR:pbGEPlan.SPR,SUM:pbGEPlan.SUM};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='my-embalj-plan.json'; a.click(); URL.revokeObjectURL(url);
