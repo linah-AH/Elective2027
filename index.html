@@ -453,6 +453,49 @@ function switchView(v){
 // PLAN BUILDER — drag & drop course shortlist
 // ══════════════════════════════════════════════════════════════════════
 let pbPlan = { AUT:[], SPR:[], SUM:[] };
+let pbFmtChoice = {};  // key "TERM|CODE" -> chosen fmtType (e.g. 'BW')
+let pbGEPlan = { AUT:[], SPR:[], SUM:[] };  // GE trip codes per term
+let pbFmtExact = {};  // key "TERM|CODE" -> exact format string for date precision
+
+// Parse a GE date string like "18-24 October 2026" or "2-8 May 2027" into {start,end}
+function pbGEDates(g){
+  const m = (g.dates||'').match(/(\d+)\s*[-–]\s*(\d+)\s+(\w+)\s+(\d{4})/);
+  if(!m) return null;
+  const months={january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+  const mo=months[m[3].toLowerCase()];
+  if(mo===undefined) return null;
+  const yr=+m[4];
+  return {start:new Date(yr,mo,+m[1]), end:new Date(yr,mo,+m[2])};
+}
+// Which term does a GE trip belong to (from its code suffix)?
+function pbGETerm(g){
+  if(/AUT26/.test(g.code)) return 'AUT';
+  if(/SPR27/.test(g.code)) return 'SPR';
+  if(/SUM27/.test(g.code)) return 'SUM';
+  return 'AUT';
+}
+function pbGEById(code){ return GE_DB.find(g=>g.code===code); }
+
+// Return the exact COURSE_DB session for a code in a term, honouring the chosen format
+function pbGetSession(code, term){
+  const sessions = COURSE_DB.filter(c=>c.code===code && c.term===term);
+  if(!sessions.length){
+    return COURSE_DB.find(c=>c.code===code) || null;
+  }
+  // 1. Exact format string (distinguishes Block Week 9 vs Block Week 10)
+  const exact = pbFmtExact[term+'|'+code];
+  if(exact){
+    const me = sessions.find(c=>c.format===exact);
+    if(me) return me;
+  }
+  // 2. Format type (BW / FIVE_W / DUBAI…)
+  const want = pbFmtChoice[term+'|'+code];
+  if(want){
+    const m = sessions.find(c=>fmtType(c)===want);
+    if(m) return m;
+  }
+  return sessions[0];
+}
 let pbFilter = 'ALL';
 let pbFmtFilter = 'ALL';
 let pbSearch = '';
@@ -468,10 +511,21 @@ function pbLeaveDays(c){
 }
 
 function pbLoadSaved(){
-  try{ const s=localStorage.getItem('embalj_plan'); if(s) pbPlan=JSON.parse(s); }
-  catch(e){ pbPlan={AUT:[],SPR:[],SUM:[]}; }
+  try{
+    const s=localStorage.getItem('embalj_plan'); if(s) pbPlan=JSON.parse(s);
+    const fc=localStorage.getItem('embalj_fmtchoice'); if(fc) pbFmtChoice=JSON.parse(fc);
+    const gp=localStorage.getItem('embalj_geplan'); if(gp) pbGEPlan=JSON.parse(gp);
+    const fe=localStorage.getItem('embalj_fmtexact'); if(fe) pbFmtExact=JSON.parse(fe);
+  }catch(e){ pbPlan={AUT:[],SPR:[],SUM:[]}; pbFmtChoice={}; }
 }
-function pbSave(){ try{ localStorage.setItem('embalj_plan', JSON.stringify(pbPlan)); }catch(e){} }
+function pbSave(){
+  try{
+    localStorage.setItem('embalj_plan', JSON.stringify(pbPlan));
+    localStorage.setItem('embalj_fmtchoice', JSON.stringify(pbFmtChoice));
+    localStorage.setItem('embalj_geplan', JSON.stringify(pbGEPlan));
+    localStorage.setItem('embalj_fmtexact', JSON.stringify(pbFmtExact));
+  }catch(e){}
+}
 
 function buildPlanBuilder(){
   pbLoadSaved();
@@ -483,6 +537,8 @@ function buildPlanBuilder(){
         <input class="pb-search" id="pbSearch" placeholder="Search courses…" oninput="pbOnSearch(this.value)" />
         <div class="pb-filter-row" id="pbFilters"></div>
         <div id="pbCards"></div>
+        <h3 style="margin-top:16px">✈️ Global Experiences</h3>
+        <div id="pbGECards"></div>
       </div>
       <div class="pb-board">
         <div class="pb-stats" id="pbStats"></div>
@@ -498,7 +554,7 @@ function buildPlanBuilder(){
     </div>
     <input type="file" id="pbFile" accept=".json" style="display:none" onchange="pbHandleFile(event)" />
   `;
-  pbRenderFilters(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+  pbRenderFilters(); pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 
 function pbRenderFilters(){
@@ -526,26 +582,58 @@ function pbRenderCards(){
   }).sort((a,b)=>a.name.localeCompare(b.name));
   const wrap = document.getElementById('pbCards');
   if(!list.length){ wrap.innerHTML='<div class="pb-empty">No matching courses</div>'; return; }
+  const FMT_BADGE = {BW:'Block',FIVE_W:'5-wk',DUBAI:'Dubai',BLENDED:'Blended',IRREGULAR:'Irreg'};
   wrap.innerHTML = list.map(c=>{
-    // If a format filter is active, surface the matching session's details
-    let sess = c, fmtLabel = (c.formats||[c.format]||[''])[0];
+    // Gather all distinct format types this course is offered in
+    const allSessions = COURSE_DB.filter(x=>x.code===c.code);
+    const fmtTypes = [...new Set(allSessions.map(x=>fmtType(x)))];
+    let sess = allSessions[0] || c;
     if(pbFmtFilter!=='ALL'){
-      const match = COURSE_DB.find(x=>x.code===c.code && fmtType(x)===pbFmtFilter);
-      if(match){ sess = match; fmtLabel = match.format; }
+      const match = allSessions.find(x=>fmtType(x)===pbFmtFilter);
+      if(match) sess = match;
     }
     const col = FMT_COL[fmtType(sess)]||'#64748b';
-    const terms = pbFmtFilter!=='ALL' ? sess.term : (c.terms||[c.term]).join('/');
+    const terms = (c.terms||[c.term]).join('/');
+    // Format badges — highlight the filtered one
+    const badges = fmtTypes.map(ft=>{
+      const active = (pbFmtFilter==='ALL') || (ft===pbFmtFilter);
+      const bcol = FMT_COL[ft]||'#64748b';
+      return `<span style="display:inline-block;font-size:8.5px;font-weight:600;padding:1px 6px;border-radius:8px;margin-right:3px;background:${active?bcol:'transparent'}22;color:${active?bcol:'#475569'};border:1px solid ${active?bcol+'66':'#33415544'}">${FMT_BADGE[ft]||ft}</span>`;
+    }).join('');
+    const multi = fmtTypes.length>1 ? '<span style="font-size:8.5px;color:#fbbf24;margin-left:2px">⇄ choose date</span>' : '';
     return `<div class="pb-card" draggable="true" data-code="${c.code}" style="border-left-color:${col}"
       ondragstart="pbDragStart(event,'${c.code}')" ondragend="pbDragEnd(event)">
       <div class="pb-card-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa} · ${terms}</span></div>
       <div class="pb-card-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,42)}</div>
-      <div class="pb-card-meta">${fmtLabel} · ~${pbLeaveDays(sess)} leave days</div>
+      <div class="pb-card-meta" style="margin-top:3px">${badges}${multi}</div>
     </div>`;
   }).join('');
 }
 
-let pbDragCode = null;
-function pbDragStart(e, code){ pbDragCode=code; e.dataTransfer.effectAllowed='move'; e.target.classList.add('dragging'); }
+let pbDragCode = null, pbDragFmt = null;
+let pbDragGE = null;  // GE code being dragged
+
+function pbRenderGECards(){
+  const placed = new Set([...pbGEPlan.AUT,...pbGEPlan.SPR,...pbGEPlan.SUM]);
+  const wrap = document.getElementById('pbGECards');
+  if(!wrap) return;
+  const list = GE_DB.filter(g=>!placed.has(g.code));
+  if(!list.length){ wrap.innerHTML='<div class="pb-empty">All trips added</div>'; return; }
+  wrap.innerHTML = list.map(g=>{
+    const term = pbGETerm(g);
+    const termLbl = term==='AUT'?'Aut':term==='SPR'?'Spr':'Sum';
+    return `<div class="pb-card" draggable="true" data-ge="${g.code}" style="border-left-color:#059669"
+      ondragstart="pbGEDragStart(event,'${g.code}')" ondragend="pbDragEnd(event)">
+      <div class="pb-card-code" style="color:#6ee7b7">✈️ ${g.location} <span style="color:#64748b;font-weight:400">· ${termLbl}</span></div>
+      <div class="pb-card-name">${(g.theme||'').slice(0,44)}</div>
+      <div class="pb-card-meta">${g.dates} · ~7 leave days</div>
+    </div>`;
+  }).join('');
+}
+
+function pbGEDragStart(e, code){ pbDragGE=code; pbDragCode=null; e.dataTransfer.effectAllowed='move'; e.target.classList.add('dragging'); }
+
+function pbDragStart(e, code){ pbDragCode=code; pbDragFmt = (pbFmtFilter!=='ALL'?pbFmtFilter:null); e.dataTransfer.effectAllowed='move'; e.target.classList.add('dragging'); }
 function pbDragEnd(e){ e.target.classList.remove('dragging'); document.querySelectorAll('.pb-term-col').forEach(c=>c.classList.remove('drag-over')); }
 
 function pbRenderTerms(){
@@ -559,22 +647,35 @@ function pbRenderTerms(){
     const codes = pbPlan[t.key]||[];
     const slots = codes.map(code=>{
       const c = uniq[code]; if(!c) return '';
-      const col = FMT_COL[fmtType(c)]||'#64748b';
+      const sess = pbGetSession(code, t.key) || c;
+      const col = FMT_COL[fmtType(sess)]||'#64748b';
       const conflict = pbHasConflict(code, t.key);
       return `<div class="pb-slot ${conflict?'pb-conflict':''}" style="border-left-color:${col}">
         <button class="pb-slot-rm" onclick="pbRemove('${t.key}','${code}')">×</button>
         <div class="pb-slot-code">${c.code} <span style="color:#64748b;font-weight:400">· ${c.sa}</span></div>
         <div class="pb-slot-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,40)}</div>
-        <div class="pb-slot-meta">${(c.formats||[c.format]||[''])[0]} · ~${pbLeaveDays(c)} days${conflict?' · ⚠ overlaps':''}</div>
+        <div class="pb-slot-meta">${sess.format||''} · ~${pbLeaveDays(sess)} days${conflict?' · ⚠ overlaps':''}</div>
       </div>`;
     }).join('');
+    // GE trips for this term
+    const geCodes = pbGEPlan[t.key]||[];
+    const geSlots = geCodes.map(gc=>{
+      const g = pbGEById(gc); if(!g) return '';
+      return `<div class="pb-slot" style="border-left-color:#059669;background:rgba(5,150,105,.08)">
+        <button class="pb-slot-rm" onclick="pbRemoveGE('${t.key}','${gc}')">×</button>
+        <div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location}</div>
+        <div class="pb-slot-name">${(g.theme||'').slice(0,38)}</div>
+        <div class="pb-slot-meta">${g.dates} · ~7 days</div>
+      </div>`;
+    }).join('');
+    const totalCount = codes.length + geCodes.length;
     return `<div class="pb-term-col" data-term="${t.key}"
       ondragover="pbDragOver(event,'${t.key}')" ondragleave="pbDragLeave(event)" ondrop="pbDrop(event,'${t.key}')">
       <div class="pb-term-head">
         <div class="pb-term-title"><span class="pb-term-dot" style="background:${t.col}"></span>${t.label}</div>
-        <span class="pb-term-count">${codes.length}</span>
+        <span class="pb-term-count">${totalCount}</span>
       </div>
-      ${slots || '<div class="pb-empty">Drag courses here</div>'}
+      ${slots}${geSlots}${(slots||geSlots)?'':'<div class="pb-empty">Drag courses or trips here</div>'}
     </div>`;
   }).join('');
 }
@@ -584,6 +685,22 @@ function pbDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
 function pbDrop(e, term){
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
+
+  // ── GE trip drop ──
+  if(pbDragGE){
+    const g = pbGEById(pbDragGE);
+    const geTerm = g?pbGETerm(g):null;
+    if(geTerm && geTerm!==term){
+      pbToast(`${g.location} runs in ${geTerm==='AUT'?'Autumn':geTerm==='SPR'?'Spring':'Summer'}`);
+      pbDragGE=null; return;
+    }
+    ['AUT','SPR','SUM'].forEach(t=>{ pbGEPlan[t]=pbGEPlan[t].filter(x=>x!==pbDragGE); });
+    if(!pbGEPlan[term].includes(pbDragGE)) pbGEPlan[term].push(pbDragGE);
+    pbDragGE=null;
+    pbSave(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+    return;
+  }
+
   if(!pbDragCode) return;
   const uniq = advUniqueCourses();
   const c = uniq[pbDragCode];
@@ -591,27 +708,89 @@ function pbDrop(e, term){
   const offered = (c.terms||[c.term]);
   if(!offered.includes(term)){
     pbToast(`${c.code} runs in ${offered.join('/')}, not this term`);
-    pbDragCode=null; return;
+    pbDragCode=null; pbDragFmt=null; return;
   }
-  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t]=pbPlan[t].filter(x=>x!==pbDragCode); });
-  if(!pbPlan[term].includes(pbDragCode)) pbPlan[term].push(pbDragCode);
-  pbDragCode=null;
+  const code = pbDragCode;
+  const termSessions = COURSE_DB.filter(x=>x.code===code && x.term===term);
+
+  // Narrow to the dragged format type if specified
+  let candidates = termSessions;
+  if(pbDragFmt){
+    const f = termSessions.filter(x=>fmtType(x)===pbDragFmt);
+    if(f.length) candidates = f;
+  }
+
+  // ── If multiple DATE options exist (e.g. two block weeks), ask which ──
+  if(candidates.length > 1){
+    pbDragCode=null; pbDragFmt=null;
+    pbAskDateChoice(code, term, candidates);
+    return;
+  }
+
+  const chosen = candidates[0] || termSessions[0];
+  const chosenFmt = chosen ? fmtType(chosen) : null;
+  pbCommitCourse(code, term, chosen ? chosen.format : null);
+  pbDragCode=null; pbDragFmt=null;
+}
+
+// Lock in a specific session (by exact format string) for a course in a term
+function pbCommitCourse(code, term, formatStr){
+  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t]=pbPlan[t].filter(x=>x!==code); delete pbFmtChoice[t+'|'+code]; });
+  if(!pbPlan[term].includes(code)) pbPlan[term].push(code);
+  if(formatStr) pbFmtChoice[term+'|'+code] = fmtTypeFromString(formatStr);
+  // store exact format string too for date precision
+  pbFmtExact[term+'|'+code] = formatStr || '';
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
+
+// Modal to pick between multiple date/block options
+function pbAskDateChoice(code, term, sessions){
+  const uniq = advUniqueCourses();
+  const c = uniq[code];
+  const overlay = document.createElement('div');
+  overlay.id = 'pbDateModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:700;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)';
+  const opts = sessions.map(s=>{
+    const d=extractDates(s);
+    const dateLbl = d ? d.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+d.end.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : (s.timetable||'');
+    return `<button onclick="pbPickDate('${code}','${term}','${s.format.replace(/'/g,"")}')" style="display:block;width:100%;text-align:left;background:rgba(255,255,255,.06);border:1px solid var(--bdr);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;color:var(--tx1);font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.background='rgba(99,102,241,.2)';this.style.borderColor='rgba(99,102,241,.5)'" onmouseout="this.style.background='rgba(255,255,255,.06)';this.style.borderColor='var(--bdr)'">
+      <div style="font-weight:600;font-size:13px;color:#a5b4fc">${s.format}</div>
+      <div style="font-size:12px;color:var(--tx2);margin-top:2px">📅 ${dateLbl}</div>
+    </button>`;
+  }).join('');
+  overlay.innerHTML = `<div style="background:#13161f;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:20px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.7)">
+    <div style="font-size:14px;font-weight:600;color:#e8eaf0;margin-bottom:4px">${c.name.replace(/ NEW ELECTIVE.*/,'')}</div>
+    <div style="font-size:11.5px;color:var(--tx3);margin-bottom:14px">This course is offered in more than one format/date — pick the option you want:</div>
+    ${opts}
+    <button onclick="pbCloseDateModal()" style="width:100%;background:none;border:1px solid var(--bdr);border-radius:8px;padding:8px;color:var(--tx3);cursor:pointer;font-size:12px;margin-top:4px;font-family:'DM Sans',sans-serif">Cancel</button>
+  </div>`;
+  overlay.onclick=(ev)=>{ if(ev.target===overlay) pbCloseDateModal(); };
+  document.body.appendChild(overlay);
+}
+function pbPickDate(code, term, formatStr){
+  pbCommitCourse(code, term, formatStr);
+  pbCloseDateModal();
+}
+function pbCloseDateModal(){ const m=document.getElementById('pbDateModal'); if(m) m.remove(); }
 
 function pbRemove(term, code){
   pbPlan[term] = pbPlan[term].filter(x=>x!==code);
+  delete pbFmtChoice[term+'|'+code];
+  delete pbFmtExact[term+'|'+code];
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+}
+function pbRemoveGE(term, code){
+  pbGEPlan[term] = pbGEPlan[term].filter(x=>x!==code);
+  pbSave(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 
 function pbHasConflict(code, term){
-  const uniq = advUniqueCourses();
-  const c = uniq[code]; if(!c) return false;
-  const d1 = extractDates(c); if(!d1) return false;
+  const s1 = pbGetSession(code, term); if(!s1) return false;
+  const d1 = extractDates(s1); if(!d1) return false;
   return pbPlan[term].some(other=>{
     if(other===code) return false;
-    const oc = uniq[other]; if(!oc) return false;
-    const d2 = extractDates(oc); if(!d2) return false;
+    const s2 = pbGetSession(other, term); if(!s2) return false;
+    const d2 = extractDates(s2); if(!d2) return false;
     return d1.start <= d2.end && d2.start <= d1.end;
   });
 }
@@ -619,14 +798,16 @@ function pbHasConflict(code, term){
 function pbRenderStats(){
   const uniq = advUniqueCourses();
   const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
+  const allGE = [...pbGEPlan.AUT,...pbGEPlan.SPR,...pbGEPlan.SUM];
   let totalLeave = 0, conflicts = 0;
-  all.forEach(code=>{ const c=uniq[code]; if(c) totalLeave += pbLeaveDays(c); });
+  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ const s=pbGetSession(code,t); if(s) totalLeave += pbLeaveDays(s); }); });
+  totalLeave += allGE.length * 7;  // ~7 leave days per GE trip
   ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ if(pbHasConflict(code,t)) conflicts++; }); });
   conflicts = Math.floor(conflicts/2);
   const dist = {AUT:pbPlan.AUT.length, SPR:pbPlan.SPR.length, SUM:pbPlan.SUM.length};
   const maxT = Math.max(dist.AUT,dist.SPR,dist.SUM,1);
   document.getElementById('pbStats').innerHTML = `
-    <div class="pb-stat"><div class="pb-stat-label">Courses selected</div><div class="pb-stat-value">${all.length}</div><div class="pb-stat-sub">across 3 terms</div></div>
+    <div class="pb-stat"><div class="pb-stat-label">Selected</div><div class="pb-stat-value">${all.length}<span style="font-size:13px;color:var(--tx3)"> + ${allGE.length}✈️</span></div><div class="pb-stat-sub">${all.length} courses · ${allGE.length} trips</div></div>
     <div class="pb-stat"><div class="pb-stat-label">Est. leave days</div><div class="pb-stat-value" style="color:${totalLeave>40?'#f87171':totalLeave>25?'#fbbf24':'#6ee7b7'}">${totalLeave}</div><div class="pb-stat-sub">working days away</div></div>
     <div class="pb-stat"><div class="pb-stat-label">Term balance</div>
       <div style="display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:2px">
@@ -648,12 +829,12 @@ function pbToast(msg){
   t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
 }
 
-function pbClear(){ if(!confirm('Clear all selected courses?')) return; pbPlan={AUT:[],SPR:[],SUM:[]}; pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
+function pbClear(){ if(!confirm('Clear all selected courses?')) return; pbPlan={AUT:[],SPR:[],SUM:[]}; pbFmtChoice={}; pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
 
 function pbExport(){
   const uniq=advUniqueCourses();
   const data={generated:new Date().toISOString(),plan:pbPlan,detail:{}};
-  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];return c?{code:c.code,name:c.name,sa:c.sa,format:(c.formats||[c.format])[0],leaveDays:pbLeaveDays(c)}:{code};}); });
+  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];const s=pbGetSession(code,t);return c?{code:c.code,name:c.name,sa:c.sa,format:s?s.format:(c.formats||[c.format])[0],leaveDays:pbLeaveDays(s||c)}:{code};}); });
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='my-embalj-plan.json'; a.click(); URL.revokeObjectURL(url);
@@ -673,15 +854,16 @@ function pbAutoFill(){
   const uniq=advUniqueCourses();
   const scored=Object.values(uniq).map(c=>({...c,score:scoreC(c,role)})).sort((a,b)=>b.score-a.score);
   pbPlan={AUT:[],SPR:[],SUM:[]}; let added=0;
+  pbFmtChoice={};
   for(const c of scored){
     if(added>=6) break;
     const offered=(c.terms||[c.term]); let placed=false;
     for(const t of offered){
-      const d1=extractDates(c);
-      const clash=d1&&pbPlan[t].some(oc=>{const o=uniq[oc];const d2=o&&extractDates(o);return d2&&d1.start<=d2.end&&d2.start<=d1.end;});
-      if(!clash){ pbPlan[t].push(c.code); placed=true; added++; break; }
+      const sess=pbGetSession(c.code,t); const d1=sess&&extractDates(sess);
+      const clash=d1&&pbPlan[t].some(oc=>{const s2=pbGetSession(oc,t);const d2=s2&&extractDates(s2);return d2&&d1.start<=d2.end&&d2.start<=d1.end;});
+      if(!clash){ pbPlan[t].push(c.code); if(sess) pbFmtChoice[t+'|'+c.code]=fmtType(sess); placed=true; added++; break; }
     }
-    if(!placed&&offered.length){ pbPlan[offered[0]].push(c.code); added++; }
+    if(!placed&&offered.length){ const t=offered[0]; pbPlan[t].push(c.code); const sess=pbGetSession(c.code,t); if(sess) pbFmtChoice[t+'|'+c.code]=fmtType(sess); added++; }
   }
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
   pbToast(`Suggested ${added} courses for ${role} ✓`);
@@ -703,15 +885,22 @@ function pbRenderTimeline(){
   ['AUT','SPR','SUM'].forEach(t=>{
     pbPlan[t].forEach(code=>{
       const c=uniq[code]; if(!c) return;
-      // find the session matching this term for accurate dates
-      const sess = COURSE_DB.find(x=>x.code===code && x.term===t) || c;
+      const sess = pbGetSession(code, t) || c;
       const d=extractDates(sess);
       if(!d) return;
       items.push({code, name:c.name, start:d.start, end:d.end, term:t,
-        fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess)});
+        fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess), isGE:false});
+    });
+    // GE trips
+    pbGEPlan[t].forEach(gc=>{
+      const g=pbGEById(gc); if(!g) return;
+      const d=pbGEDates(g);
+      if(!d) return;
+      items.push({code:'✈️ '+g.location, name:g.location+' — '+(g.theme||''), start:d.start, end:d.end, term:t,
+        fmt:'GE', col:'#059669', leaveDays:7, isGE:true});
     });
   });
-  if(!items.length){ host.innerHTML='<div class="pb-empty" style="margin-top:14px">Selected courses have no fixed dates to plot (blended/irregular).</div>'; return; }
+  if(!items.length){ host.innerHTML='<div class="pb-empty" style="margin-top:14px">Selected items have no fixed dates to plot.</div>'; return; }
   items.sort((a,b)=>a.start-b.start);
 
   // ── Compute insights ──
@@ -728,7 +917,7 @@ function pbRenderTimeline(){
 
   // trip-combining: block-week courses whose dates are within 7 days of each other
   const combos=[];
-  const blocks = items.filter(i=>i.fmt==='BW'||i.fmt==='DUBAI');
+  const blocks = items.filter(i=>i.fmt==='BW'||i.fmt==='DUBAI'||i.fmt==='GE');
   for(let i=0;i<blocks.length;i++) for(let j=i+1;j<blocks.length;j++){
     const gap = Math.abs(blocks[j].start - blocks[i].end)/86400000;
     const gap2 = Math.abs(blocks[i].start - blocks[j].end)/86400000;
