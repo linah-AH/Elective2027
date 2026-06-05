@@ -1638,7 +1638,7 @@ let advOpen = false;
 // ── REAL-AI CONFIG ──────────────────────────────────────────────────
 // Paste your Cloudflare Worker URL here to enable real Claude AI chat.
 // Leave as empty string '' to use the offline rule-based parser instead.
-const ADVISOR_PROXY_URL = 'https://embalj-advisor.linah-kah.workers.dev';   // e.g. 'https://embalj-advisor.yourname.workers.dev'
+const ADVISOR_PROXY_URL = 'https://embalj-advisor.linah-kah.workers.dev';
 let advAIHistory = [];          // conversation history for the AI
 let advAIBusy = false;
 
@@ -2012,13 +2012,32 @@ async function advAskAI(text){
       body: JSON.stringify({messages: advAIHistory})
     });
     const data = await resp.json();
-    const reply = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('') || (data.error? '⚠️ '+data.error : '⚠️ No response');
+
+    // Extract text reply — handle both success and Anthropic error shapes
+    let reply = '';
+    if(data.content && data.content.length){
+      reply = data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+    } else if(data.error){
+      // Anthropic error object: { type, message } or plain string
+      const errMsg = typeof data.error === 'object' ? (data.error.message||JSON.stringify(data.error)) : String(data.error);
+      reply = '⚠️ API error: ' + errMsg;
+    } else if(data.type === 'error'){
+      const errMsg = data.error ? (data.error.message||data.error.type||JSON.stringify(data.error)) : 'Unknown error';
+      reply = '⚠️ ' + errMsg;
+    } else {
+      reply = '⚠️ Unexpected response — please try again.';
+    }
+
     document.getElementById('advTyping')?.remove();
-    advMsg('ai', advFormatMd(reply));
-    advAIHistory.push({role:'assistant', content:reply});
+    if(reply.startsWith('⚠️')){
+      advMsg('ai', reply);
+    } else {
+      advMsg('ai', advFormatMd(reply));
+      advAIHistory.push({role:'assistant', content:reply});
+    }
   }catch(err){
     document.getElementById('advTyping')?.remove();
-    advMsg('ai', '⚠️ Could not reach the advisor service. '+(err.message||''));
+    advMsg('ai', '⚠️ Could not reach the advisor. ' + (err.message||String(err)));
   }
   advAIBusy=false;
 }
