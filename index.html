@@ -669,11 +669,12 @@ function pbRenderTerms(){
     const geCodes = pbGEPlan[t.key]||[];
     const geSlots = geCodes.map(gc=>{
       const g = pbGEById(gc); if(!g) return '';
-      return `<div class="pb-slot" style="border-left-color:#059669;background:rgba(5,150,105,.08)">
+      const geConflict = pbHasConflict(gc, t.key);
+      return `<div class="pb-slot ${geConflict?'pb-conflict':''}" style="border-left-color:#059669;background:${geConflict?'rgba(239,68,68,.08)':'rgba(5,150,105,.08)'}">
         <button class="pb-slot-rm" onclick="pbRemoveGE('${t.key}','${gc}')">×</button>
-        <div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location}</div>
+        <div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location} <span style="color:#64748b;font-weight:400">· GE</span></div>
         <div class="pb-slot-name">${(g.theme||'').slice(0,38)}</div>
-        <div class="pb-slot-meta">${g.dates} · ~7 days</div>
+        <div class="pb-slot-meta">${g.dates} · ~7 days${geConflict?' · ⚠ overlaps':''}</div>
       </div>`;
     }).join('');
     const totalCount = codes.length + geCodes.length;
@@ -792,14 +793,30 @@ function pbRemoveGE(term, code){
   pbSave(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 
+// Date range for ANY plan item — course code or GE code — in a term
+function pbItemDates(code, term){
+  if(code && code.indexOf('C')===0){           // GE codes start with C
+    const g = pbGEById(code);
+    return g ? pbGEDates(g) : null;
+  }
+  const s = pbGetSession(code, term);
+  return s ? extractDates(s) : null;
+}
+
+// Build the full list of dated items in a term: courses + GE trips
+function pbTermItems(term){
+  const items = [];
+  (pbPlan[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:false}); });
+  (pbGEPlan[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:true}); });
+  return items;
+}
+
+// Does this item (course OR GE) overlap any OTHER dated item in the same term?
 function pbHasConflict(code, term){
-  const s1 = pbGetSession(code, term); if(!s1) return false;
-  const d1 = extractDates(s1); if(!d1) return false;
-  return pbPlan[term].some(other=>{
-    if(other===code) return false;
-    const s2 = pbGetSession(other, term); if(!s2) return false;
-    const d2 = extractDates(s2); if(!d2) return false;
-    return d1.start <= d2.end && d2.start <= d1.end;
+  const d1 = pbItemDates(code, term); if(!d1) return false;
+  return pbTermItems(term).some(it=>{
+    if(it.code===code) return false;
+    return d1.start <= it.d.end && it.d.start <= d1.end;
   });
 }
 
@@ -810,8 +827,13 @@ function pbRenderStats(){
   let totalLeave = 0, conflicts = 0, totalCredits = 0;
   ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ const s=pbGetSession(code,t); if(s){ totalLeave += pbLeaveDays(s); totalCredits += pbCredits(s); } }); });
   totalLeave += allGE.length * 7;  // ~7 leave days per GE trip
-  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ if(pbHasConflict(code,t)) conflicts++; }); });
-  conflicts = Math.floor(conflicts/2);
+  // Count overlapping PAIRS across courses AND GE trips
+  ['AUT','SPR','SUM'].forEach(t=>{
+    const items = pbTermItems(t);
+    for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++){
+      if(items[i].d.start <= items[j].d.end && items[j].d.start <= items[i].d.end) conflicts++;
+    }
+  });
   const dist = {AUT:pbPlan.AUT.length, SPR:pbPlan.SPR.length, SUM:pbPlan.SUM.length};
   const maxT = Math.max(dist.AUT,dist.SPR,dist.SUM,1);
   document.getElementById('pbStats').innerHTML = `
@@ -827,7 +849,7 @@ function pbRenderStats(){
   `;
   if(conflicts){
     const w=document.createElement('div'); w.className='pb-warn'; w.style.cssText='flex-basis:100%';
-    w.innerHTML=`⚠️ ${conflicts} pair${conflicts>1?'s':''} of courses overlap in dates — highlighted in red.`;
+    w.innerHTML=`⚠️ ${conflicts} overlapping pair${conflicts>1?'s':''} (courses &amp; GE trips) — highlighted in red.`;
     document.getElementById('pbStats').appendChild(w);
   }
 }
@@ -971,8 +993,27 @@ function pbRenderTimeline(){
   });
   html += `</div>`;
 
+  // ── Week-number ruler ──
+  const WEEK_MS = 7*86400000;
+  const nWeeks = Math.ceil(totalMs/WEEK_MS);
+  html += `<div style="position:relative;width:${TLW}px;height:16px;margin-bottom:2px;border-bottom:1px solid var(--bdr)">`;
+  for(let w=0; w<nWeeks; w++){
+    const wkStart = new Date(TL_START.getTime()+w*WEEK_MS);
+    const lx = (w*WEEK_MS)/totalMs*TLW;
+    const wWd = WEEK_MS/totalMs*TLW;
+    // label every 2nd week to avoid crowding when narrow
+    const showNum = (wWd>=14) || (w%2===0);
+    html += `<div style="position:absolute;left:${lx}px;width:${wWd}px;top:0;height:100%;border-left:1px solid rgba(255,255,255,.05);font-size:7.5px;color:var(--tx3);text-align:center;line-height:16px;overflow:hidden" title="Week ${w+1} — starts ${wkStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}">${showNum?('W'+(w+1)):''}</div>`;
+  }
+  html += `</div>`;
+
   // constraint bands
   html += `<div style="position:relative;width:${TLW}px;height:${items.length*rowH+10}px;background:rgba(255,255,255,.015);border-radius:8px;overflow:hidden">`;
+  // faint week gridlines behind everything
+  for(let w=0; w<nWeeks; w++){
+    const lx = (w*WEEK_MS)/totalMs*TLW;
+    html += `<div style="position:absolute;left:${lx}px;top:0;height:100%;width:1px;background:rgba(255,255,255,.035)"></div>`;
+  }
   // term background tints
   TERM_BANDS.forEach(tb=>{
     const lx=(new Date(tb.s)-TL_START)/totalMs*TLW;
@@ -1594,6 +1635,13 @@ let advState = {
 };
 let advOpen = false;
 
+// ── REAL-AI CONFIG ──────────────────────────────────────────────────
+// Paste your Cloudflare Worker URL here to enable real Claude AI chat.
+// Leave as empty string '' to use the offline rule-based parser instead.
+const ADVISOR_PROXY_URL = '';   // e.g. 'https://embalj-advisor.yourname.workers.dev'
+let advAIHistory = [];          // conversation history for the AI
+let advAIBusy = false;
+
 function toggleAdvisor(){
   advOpen = !advOpen;
   document.getElementById('advWrap').classList.toggle('open', advOpen);
@@ -1603,8 +1651,17 @@ function toggleAdvisor(){
 
 function advStart(){
   advState = {step:1, role:null, industry:null, leave:null, priorities:[], format_pref:null, cost:null};
+  advAIHistory = [];
+  const statusEl = document.getElementById('advStatus');
+  if(statusEl) statusEl.textContent = ADVISOR_PROXY_URL ? 'Online · Powered by Claude' : 'Online · Rule-based';
   const msgs = document.getElementById('advMsgs');
   msgs.innerHTML = '';
+
+  // If real AI is enabled, start an open conversation instead of the questionnaire
+  if(ADVISOR_PROXY_URL){
+    advMsg('ai', `<b>👋 Welcome to your EMBA Strategy Advisor</b><br><br>I'm powered by Claude and I know the full EMBALJ 2027 portfolio — every elective, format, date, credit value, and Global Experience trip.<br><br>Tell me about yourself and what you want from the programme — your target role, industry, how much leave you have — and I'll build you a personalised strategy. Or just ask me anything, like <i>"which finance electives are best for a future CFO?"</i>`);
+    return;
+  }
   advMsg('ai', `<b>👋 Welcome to your EMBA Strategy Advisor</b><br><br>
 I'll help you build a personalised elective plan based on your goals and constraints — no account or API key needed.<br><br>
 I have full knowledge of all <b>${Object.keys(advUniqueCourses()).length} electives</b> and <b>${GE_DB.length} Global Experience trips</b> in the EMBALJ 2027 portfolio.<br><br>
@@ -1932,6 +1989,55 @@ function advSend(){
 }
 
 function advHandleText(text){
+  // If a Cloudflare proxy is configured, use REAL Claude AI
+  if(ADVISOR_PROXY_URL){ advAskAI(text); return; }
+  // Otherwise fall back to the offline rule-based parser
+  advHandleTextRules(text);
+}
+
+async function advAskAI(text){
+  if(advAIBusy) return;
+  advAIBusy = true;
+  advAIHistory.push({role:'user', content:text});
+  // typing indicator
+  const typing = document.createElement('div');
+  typing.className='adv-msg ai'; typing.id='advTyping';
+  typing.innerHTML='<div class="adv-bubble"><div class="adv-typing"><span></span><span></span><span></span></div></div>';
+  document.getElementById('advMsgs').appendChild(typing);
+  document.getElementById('advMsgs').scrollTop=99999;
+  try{
+    const resp = await fetch(ADVISOR_PROXY_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages: advAIHistory})
+    });
+    const data = await resp.json();
+    const reply = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('') || (data.error? '⚠️ '+data.error : '⚠️ No response');
+    document.getElementById('advTyping')?.remove();
+    advMsg('ai', advFormatMd(reply));
+    advAIHistory.push({role:'assistant', content:reply});
+  }catch(err){
+    document.getElementById('advTyping')?.remove();
+    advMsg('ai', '⚠️ Could not reach the advisor service. '+(err.message||''));
+  }
+  advAIBusy=false;
+}
+
+// Light markdown → HTML for AI replies
+function advFormatMd(text){
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/^### (.+)$/gm,'<strong style="font-size:13px;color:#c8d5f0">$1</strong>')
+    .replace(/^## (.+)$/gm,'<strong style="font-size:14px;color:#e0e4ef">$1</strong>')
+    .replace(/^- (.+)$/gm,'&nbsp;• $1')
+    .replace(/^(\d+)\. (.+)$/gm,'&nbsp;$1. $2')
+    .replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+}
+
+function advHandleTextRules(text){
   const t = text.toLowerCase();
   const uniq = advUniqueCourses();
 
@@ -2025,7 +2131,7 @@ function advHandleText(text){
     <div class="adv-avatar">🎓</div>
     <div class="adv-head-info">
       <div class="adv-head-name">EMBA Strategy Advisor</div>
-      <div class="adv-head-status">Online · Powered by Claude</div>
+      <div class="adv-head-status" id="advStatus">Online · Rule-based</div>
 
     </div>
     <button onclick="advStart()" title="Start over" style="background:none;border:none;color:#475569;cursor:pointer;font-size:13px;padding:4px;line-height:1;margin-right:2px" title="Restart">↺</button>
