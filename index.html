@@ -588,7 +588,7 @@ function pbRenderCards(){
   const placed = new Set([...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM]);
   let list = Object.values(uniq).filter(c=>{
     if(placed.has(c.code)) return false;
-    if(pbFilter!=='ALL' && !c.sa.includes(pbFilter)) return false;
+    if(pbFilter!=='ALL' && !c.sa.split('/').some(s=>s.trim()===pbFilter)) return false;
     if(pbFmtFilter!=='ALL' && !courseHasFmt(c.code, pbFmtFilter)) return false;
     if(pbSearch && !(c.name.toLowerCase().includes(pbSearch)||c.code.toLowerCase().includes(pbSearch))) return false;
     return true;
@@ -1094,7 +1094,7 @@ function buildTimeline(){
   // Group by code across all terms
   const byCode=new Map();
   COURSE_DB.forEach(c=>{
-    if(active!=='ALL'&&!c.sa.includes(active)) return;
+    if(!activeStreams.has('ALL')&&!c.sa.split('/').some(s=>activeStreams.has(s.trim()))) return;
     if(activeFmt==='GE') return;
     if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
     if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
@@ -1250,7 +1250,8 @@ function buildTimeline(){
   const note=document.createElement('div');
   note.style.cssText='padding:10px 16px;font-size:11px;color:var(--tx3);border-top:1px solid var(--bdr)';
   // If GE filter: add GE trip rows to timeline
-  if(activeFmt==='GE'){
+  const geOnly_tl=activeFmts.has('GE')&&!activeFmts.has('ALL')&&activeFmts.size===1;
+  if(geOnly_tl){
     const TL_START_GE=new Date('2026-10-12'), TL_END_GE=new Date('2027-07-02');
     const totalMs_GE=TL_END_GE-TL_START_GE;
     GE_DB.forEach(g=>{
@@ -1299,13 +1300,14 @@ function buildTimeline(){
       grid.appendChild(row);
     });
   }
-  note.textContent=(activeFmt==='GE'?GE_DB.length+' GE trips':sorted.length+' unique courses')+' · bars show actual delivery dates';
+  const geOnly=activeFmts.has('GE')&&!activeFmts.has('ALL')&&activeFmts.size===1;
+  note.textContent=(geOnly?GE_DB.length+' GE trips':sorted.length+' unique courses')+' · bars show actual delivery dates';
   grid.appendChild(note);
   outer.appendChild(grid);
   el.appendChild(outer);
 }
 
-let active='ALL', activeFmt='ALL', activeSearch='', activeBarEl=null;
+let activeStreams=new Set(['ALL']), activeFmts=new Set(['ALL']), activeSearch='', activeBarEl=null;
 const LBLW=140, W=680;
 
 function fmtD(ds){return new Date(ds).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
@@ -1333,7 +1335,7 @@ function build(){
     const groupMap=new Map();
     COURSE_DB.forEach(c=>{
       if(c.term!==ph.term) return;
-      if(active!=='ALL'&&!c.sa.includes(active)) return;
+      if(!activeStreams.has('ALL')&&!c.sa.split('/').some(s=>activeStreams.has(s.trim()))) return;
       if(activeFmt==='GE') return;
       if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
       if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
@@ -1646,14 +1648,36 @@ function applySearch(v){
 
 document.getElementById('sf').addEventListener('click',e=>{
   const p=e.target.closest('.pill'); if(!p) return;
-  document.querySelectorAll('#sf .pill').forEach(x=>x.classList.remove('on'));
-  p.classList.add('on'); active=p.dataset.v; build();
+  const v=p.dataset.v;
+  if(v==='ALL'){
+    activeStreams=new Set(['ALL']);
+    document.querySelectorAll('#sf .pill').forEach(x=>x.classList.remove('on'));
+    p.classList.add('on');
+  } else {
+    activeStreams.delete('ALL');
+    document.querySelector('#sf .pill[data-v="ALL"]').classList.remove('on');
+    if(p.classList.contains('on')){ p.classList.remove('on'); activeStreams.delete(v); }
+    else { p.classList.add('on'); activeStreams.add(v); }
+    if(activeStreams.size===0){ activeStreams.add('ALL'); document.querySelector('#sf .pill[data-v="ALL"]').classList.add('on'); }
+  }
+  build();
   if(document.getElementById('view-timeline').classList.contains('active')) buildTimeline();
 });
 document.getElementById('ff').addEventListener('click',e=>{
   const p=e.target.closest('.pill'); if(!p) return;
-  document.querySelectorAll('#ff .pill').forEach(x=>x.classList.remove('on'));
-  p.classList.add('on'); activeFmt=p.dataset.f; build();
+  const f=p.dataset.f;
+  if(f==='ALL'){
+    activeFmts=new Set(['ALL']);
+    document.querySelectorAll('#ff .pill').forEach(x=>x.classList.remove('on'));
+    p.classList.add('on');
+  } else {
+    activeFmts.delete('ALL');
+    document.querySelector('#ff .pill[data-f="ALL"]').classList.remove('on');
+    if(p.classList.contains('on')){ p.classList.remove('on'); activeFmts.delete(f); }
+    else { p.classList.add('on'); activeFmts.add(f); }
+    if(activeFmts.size===0){ activeFmts.add('ALL'); document.querySelector('#ff .pill[data-f="ALL"]').classList.add('on'); }
+  }
+  build();
   if(document.getElementById('view-timeline').classList.contains('active')) buildTimeline();
 });
 
