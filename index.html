@@ -1095,8 +1095,8 @@ function buildTimeline(){
   const byCode=new Map();
   COURSE_DB.forEach(c=>{
     if(!activeStreams.has('ALL')&&!c.sa.split('/').some(s=>activeStreams.has(s.trim()))) return;
-    if(activeFmt==='GE') return;
-    if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
+    if(activeFmts.has('GE')&&!activeFmts.has('ALL')&&activeFmts.size===1) return;
+    if(!activeFmts.has('ALL')&&!activeFmts.has(fmtType(c))) return;
     if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
     if(!byCode.has(c.code)) byCode.set(c.code,[]);
     byCode.get(c.code).push(c);
@@ -1336,8 +1336,8 @@ function build(){
     COURSE_DB.forEach(c=>{
       if(c.term!==ph.term) return;
       if(!activeStreams.has('ALL')&&!c.sa.split('/').some(s=>activeStreams.has(s.trim()))) return;
-      if(activeFmt==='GE') return;
-      if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
+      if(activeFmts.has('GE')&&!activeFmts.has('ALL')&&activeFmts.size===1) return;
+      if(!activeFmts.has('ALL')&&!activeFmts.has(fmtType(c))) return;
       if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
       const key=c.code+'|'+c.term;
       if(!groupMap.has(key)) groupMap.set(key,[]);
