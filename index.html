@@ -219,6 +219,9 @@ h1 em{font-style:italic;color:var(--ge)}
 .adv-bubble th{background:rgba(255,255,255,.1);padding:5px 8px;text-align:left;font-weight:600;border:1px solid rgba(255,255,255,.1)}
 .adv-bubble td{padding:4px 8px;border:1px solid rgba(255,255,255,.08)}
 .adv-bubble strong,.adv-bubble b{color:#c8d5f0}
+
+.ctrl-search{background:rgba(255,255,255,.06);border:1px solid var(--bdr);border-radius:8px;padding:5px 11px;font-size:12px;color:var(--tx1);font-family:'DM Sans',sans-serif;outline:none;width:180px;transition:border-color .2s}
+.ctrl-search:focus{border-color:rgba(99,102,241,.5)}
 </style>
 </head>
 <body>
@@ -249,6 +252,8 @@ h1 em{font-style:italic;color:var(--ge)}
     <span class="pill" data-v="EC">Economics</span>
     <span class="pill" data-v="MSO">Mgmt Sci & Ops</span>
   </div>
+  <span class="ctrl-lbl" style="margin-left:14px">Search</span>
+  <input id="courseSearch" type="text" placeholder="Course name or code…" oninput="applySearch(this.value)" class="ctrl-search">
   <span class="ctrl-lbl" style="margin-left:14px">Format</span>
   <div class="filters" id="ff">
     <span class="pill fmt-pill on" data-f="ALL">All</span>
@@ -256,6 +261,7 @@ h1 em{font-style:italic;color:var(--ge)}
     <span class="pill fmt-pill" data-f="FIVE_W">5-wk / Regular</span>
     <span class="pill fmt-pill" data-f="DUBAI">Dubai</span>
     <span class="pill fmt-pill" data-f="BLENDED">Blended</span>
+    <span class="pill fmt-pill" data-f="GE">GE Trips</span>
   </div>
   <div style="flex:1"></div>
   <div class="view-switch">
@@ -1089,17 +1095,18 @@ function buildTimeline(){
   const byCode=new Map();
   COURSE_DB.forEach(c=>{
     if(active!=='ALL'&&!c.sa.includes(active)) return;
+    if(activeFmt==='GE') return;
     if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
+    if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
     if(!byCode.has(c.code)) byCode.set(c.code,[]);
     byCode.get(c.code).push(c);
   });
 
-  // Sort by earliest start date
+  // Sort alphabetically by course name
   const sorted=[...byCode.entries()].sort((a,b)=>{
-    const dA=a[1].map(c=>extractDates(c)).find(d=>d);
-    const dB=b[1].map(c=>extractDates(c)).find(d=>d);
-    if(!dA&&!dB) return 0; if(!dA) return 1; if(!dB) return -1;
-    return dA.start - dB.start;
+    const nA=a[1][0].name.replace(/ NEW ELECTIVE.*/,'').trim().toLowerCase();
+    const nB=b[1][0].name.replace(/ NEW ELECTIVE.*/,'').trim().toLowerCase();
+    return nA.localeCompare(nB);
   });
 
   const outer=document.createElement('div');
@@ -1242,13 +1249,63 @@ function buildTimeline(){
   // footer note
   const note=document.createElement('div');
   note.style.cssText='padding:10px 16px;font-size:11px;color:var(--tx3);border-top:1px solid var(--bdr)';
-  note.textContent=sorted.length+' unique courses · bars show actual delivery dates · multiple rows = multiple sessions';
+  // If GE filter: add GE trip rows to timeline
+  if(activeFmt==='GE'){
+    const TL_START_GE=new Date('2026-10-12'), TL_END_GE=new Date('2027-07-02');
+    const totalMs_GE=TL_END_GE-TL_START_GE;
+    GE_DB.forEach(g=>{
+      if(activeSearch && !(g.location.toLowerCase().includes(activeSearch)||g.theme.toLowerCase().includes(activeSearch))) return;
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,.035);min-height:26px';
+      const nm=document.createElement('div');
+      nm.style.cssText=`width:${LBLW_TL}px;min-width:${LBLW_TL}px;font-size:11px;color:var(--tx2);padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--bdr);font-weight:300;flex-shrink:0`;
+      nm.title=g.theme||g.location; nm.textContent='✈️ '+g.location;
+      row.appendChild(nm);
+      const ba=document.createElement('div');
+      ba.style.cssText=`width:${TOTAL_W}px;height:26px;position:relative;flex-shrink:0`;
+      TERM_BANDS.forEach(tb=>{
+        const ts=new Date(tb.s),te=new Date(tb.e);
+        const lx=(ts-TL_START_GE)/totalMs_GE*TOTAL_W;
+        const wd=(te-ts)/totalMs_GE*TOTAL_W;
+        const band=document.createElement('div');
+        band.style.cssText=`position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${tb.col};opacity:.03;pointer-events:none`;
+        ba.appendChild(band);
+      });
+      // parse GE date
+      const dm=(g.dates||'').match(/(\d+)\s*[-–]\s*(\d+)\s+(\w+)\s+(\d{4})/);
+      if(dm){
+        const months={january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+        const mo=months[dm[3].toLowerCase()];
+        if(mo!==undefined){
+          const gs=new Date(+dm[4],mo,+dm[1]), ge=new Date(+dm[4],mo,+dm[2]);
+          const lx=Math.max(0,(gs-TL_START_GE)/totalMs_GE*TOTAL_W);
+          const wd=Math.max(14,(ge-gs+86400000)/totalMs_GE*TOTAL_W);
+          const bar=document.createElement('div');
+          bar.style.cssText=`position:absolute;left:${lx}px;top:50%;transform:translateY(-50%);width:${wd}px;height:15px;background:#059669;border-radius:8px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:500`;
+          bar.textContent='✈️ '+g.location;
+          bar.title=g.theme+' | '+g.dates;
+          bar.addEventListener('mouseenter',e=>{
+            const ht=document.getElementById('htt');
+            ht.innerHTML=`<div class="htt-name">✈️ ${g.location}</div><div class="htt-row">${g.dates}</div><div class="htt-row">${(g.theme||'').slice(0,60)}</div><div class="htt-row">${g.faculty||''}</div>`;
+            ht.style.display='block';
+            mvHtt(e);
+          });
+          bar.addEventListener('mousemove',mvHtt);
+          bar.addEventListener('mouseleave',hideHtt);
+          ba.appendChild(bar);
+        }
+      }
+      row.appendChild(ba);
+      grid.appendChild(row);
+    });
+  }
+  note.textContent=(activeFmt==='GE'?GE_DB.length+' GE trips':sorted.length+' unique courses')+' · bars show actual delivery dates';
   grid.appendChild(note);
   outer.appendChild(grid);
   el.appendChild(outer);
 }
 
-let active='ALL', activeFmt='ALL', activeBarEl=null;
+let active='ALL', activeFmt='ALL', activeSearch='', activeBarEl=null;
 const LBLW=140, W=680;
 
 function fmtD(ds){return new Date(ds).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
@@ -1277,7 +1334,9 @@ function build(){
     COURSE_DB.forEach(c=>{
       if(c.term!==ph.term) return;
       if(active!=='ALL'&&!c.sa.includes(active)) return;
+      if(activeFmt==='GE') return;
       if(activeFmt!=='ALL'&&fmtType(c)!==activeFmt) return;
+      if(activeSearch && !(c.name.toLowerCase().includes(activeSearch)||c.code.toLowerCase().includes(activeSearch))) return;
       const key=c.code+'|'+c.term;
       if(!groupMap.has(key)) groupMap.set(key,[]);
       groupMap.get(key).push(c);
@@ -1578,6 +1637,12 @@ function closePanel(){
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape') closePanel();});
+
+function applySearch(v){
+  activeSearch = v.toLowerCase().trim();
+  build();
+  if(document.getElementById('view-timeline').classList.contains('active')) buildTimeline();
+}
 
 document.getElementById('sf').addEventListener('click',e=>{
   const p=e.target.closest('.pill'); if(!p) return;
