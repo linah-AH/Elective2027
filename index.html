@@ -372,10 +372,20 @@ const CONSTRAINT_DATES=[
 
 // Map fullCode -> date range (extracted from timetable string)
 function extractDates(c){
-  // Online: parse start date from timetable
-  if(c.format==='Online'||c.delivery==='Online'){
+  // Online: parse start date — only for ON-prefix webinar courses (not E-prefix online delivery)
+  if(c.code&&c.code.startsWith('ON')){
     const m=(c.timetable||'').match(/starts\s+(\d+)\s+(\w+)\s+(\d{4})/i);
     if(m){const months={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};const mo=months[m[2].toLowerCase().slice(0,3)];if(mo!==undefined){const d=new Date(+m[3],mo,+m[1]);return {start:d,end:new Date(+m[3],mo,+m[1]+7)};}}
+    return null;
+  }
+  // Blended: extract first and last session dates from "DD Mon YYYY" patterns
+  if(c.delivery==='Blended'||c.format==='Blended Modular'){
+    const _bmonths={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const all=[...(c.timetable||'').matchAll(/(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})/gi)];
+    if(all.length>=2){
+      const f=all[0],l=all[all.length-1];
+      return {start:new Date(+f[3],_bmonths[f[2].toLowerCase()],+f[1]),end:new Date(+l[3],_bmonths[l[2].toLowerCase()],+l[1])};
+    }
     return null;
   }
   const t=c.timetable||'';
