@@ -236,6 +236,8 @@ h1 em{font-style:italic;color:var(--ge)}
 .pb-compare-col{flex:1;min-width:0}
 .pb-compare-head{font-size:13px;font-weight:700;padding:8px 12px;border-radius:8px 8px 0 0;color:#fff;letter-spacing:.04em;text-align:center}
 </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 <header class="header">
@@ -611,7 +613,9 @@ function pbToggleCompare(){
   const wrap = document.getElementById('pbTermsWrap');
   if(pbCompareMode){ pbRenderCompare(); }
   else { if(wrap) wrap.innerHTML='<div class="pb-terms" id="pbTerms"></div>'; pbRenderTerms(); }
-  pbRenderTimeline();  // timeline always refreshes to show/hide compare
+  pbRenderTimeline();
+  const cmpPdfBtn=document.getElementById('pbExportCmpBtn');
+  if(cmpPdfBtn) cmpPdfBtn.style.display=pbCompareMode?'':'none';
 }
 
 function pbGetSessionForPlan(code, term, planKey){
@@ -708,6 +712,361 @@ function pbRenderCompare(){
   </div>`;
 }
 
+function pbExportPDF(){
+  if(typeof window.jspdf === 'undefined'){
+    pbToast('PDF library loading… try again in a moment');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const uniq = advUniqueCourses();
+  const planKey = pbActivePlan;
+  const pd = pbPlans[planKey];
+
+  // Gather all items for this plan
+  const TL_START=new Date('2026-10-12');
+  function wkNum(d){ return Math.ceil((d-TL_START)/86400000/7)+1; }
+  function fmtDate(d){ return d?d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):''; }
+  function fmtDateShort(d){ return d?d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}):''; }
+
+  // Stats
+  let totalCredits=0, totalLeave=0;
+  const termData = {};
+  ['AUT','SPR','SUM'].forEach(t=>{
+    termData[t]={courses:[],ge:[]};
+    pd.plan[t].forEach(code=>{
+      const c=uniq[code]; if(!c) return;
+      const sess=pbGetSessionForPlan(code,t,planKey)||c;
+      const d=extractDates(sess);
+      totalCredits+=pbCredits(sess); totalLeave+=pbLeaveDays(sess);
+      termData[t].courses.push({code:c.code, name:c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,45),
+        sa:c.sa, format:sess.format||'', credits:pbCredits(sess), leave:pbLeaveDays(sess),
+        dates:d?fmtDateShort(d.start)+' – '+fmtDateShort(d.end):'',
+        weeks:d?'W'+wkNum(d.start)+(wkNum(d.end)!==wkNum(d.start)?'–W'+wkNum(d.end):''):'',
+        faculty:c.faculty||''});
+    });
+    pd.ge[t].forEach(gc=>{
+      const g=pbGEById(gc); if(!g) return;
+      totalLeave+=7;
+      termData[t].ge.push({location:g.location, dates:g.dates, theme:(g.theme||'').slice(0,50), faculty:g.faculty||''});
+    });
+  });
+
+  // ── Build PDF ──────────────────────────────────────────────────────
+  const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+  const W=210, M=14;
+  let y=M;
+
+  // Colour palette
+  const COL_HDR   = [15, 23, 42];       // dark navy
+  const COL_A     = [99, 102, 241];      // indigo (Plan A)
+  const COL_B     = [8, 145, 178];       // teal (Plan B)
+  const COL_PLAN  = planKey==='A' ? COL_A : COL_B;
+  const COL_SUBHD = [30, 41, 59];
+  const COL_TEXT  = [71, 85, 105];
+  const COL_LIGHT = [248, 250, 252];
+  const TERM_COLS = {AUT:[59,130,246], SPR:[16,185,129], SUM:[249,115,22]};
+  const TERM_LABELS = {AUT:'Autumn 2026', SPR:'Spring 2027', SUM:'Summer 2027'};
+
+  // ── Header band ────────────────────────────────────────────────────
+  doc.setFillColor(...COL_HDR);
+  doc.rect(0,0,W,28,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(18); doc.setFont('helvetica','bold');
+  doc.text('EMBALJ 2027 — Study Plan '+planKey, M, 12);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text('London Business School · AY 2026–27', M, 19);
+  doc.setFontSize(8);
+  doc.text('Generated '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}), W-M, 19, {align:'right'});
+
+  // ── Stats bar ──────────────────────────────────────────────────────
+  y=34;
+  const stats=[
+    {label:'Total Credits', value:String(totalCredits)},
+    {label:'Courses',       value:String([...pd.plan.AUT,...pd.plan.SPR,...pd.plan.SUM].length)},
+    {label:'GE Trips',      value:String([...pd.ge.AUT,...pd.ge.SPR,...pd.ge.SUM].length)},
+    {label:'Est. Leave',    value:'~'+totalLeave+'d'},
+  ];
+  const bw=(W-M*2)/stats.length;
+  stats.forEach((s,i)=>{
+    const x=M+i*bw;
+    doc.setFillColor(...COL_PLAN); doc.setGState && doc.setGState(doc.GState({opacity:0.12}));
+    doc.roundedRect(x,y,bw-3,16,2,2,'F');
+    if(doc.setGState) doc.setGState(doc.GState({opacity:1}));
+    doc.setTextColor(...COL_PLAN); doc.setFontSize(14); doc.setFont('helvetica','bold');
+    doc.text(s.value, x+bw/2-1.5, y+8, {align:'center'});
+    doc.setTextColor(...COL_TEXT); doc.setFontSize(7); doc.setFont('helvetica','normal');
+    doc.text(s.label, x+bw/2-1.5, y+13, {align:'center'});
+  });
+  y+=22;
+
+  // ── Per-term tables ────────────────────────────────────────────────
+  ['AUT','SPR','SUM'].forEach(t=>{
+    const td=termData[t];
+    if(!td.courses.length && !td.ge.length) return;
+
+    // Term header
+    doc.setFillColor(...TERM_COLS[t]);
+    doc.rect(M,y,W-M*2,7,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text(TERM_LABELS[t], M+3, y+5);
+    y+=9;
+
+    // Course table
+    if(td.courses.length){
+      doc.autoTable({
+        startY: y,
+        margin:{left:M, right:M},
+        head: [['Code','Course Name','Stream','Format','Dates','Wk','Cr','Leave']],
+        body: td.courses.map(c=>[c.code, c.name, c.sa, c.format, c.dates, c.weeks, c.credits+'cr', '~'+c.leave+'d']),
+        styles:{fontSize:7.5, cellPadding:2.5, textColor:COL_SUBHD, lineColor:[226,232,240], lineWidth:0.2},
+        headStyles:{fillColor:COL_SUBHD, textColor:[255,255,255], fontStyle:'bold', fontSize:7},
+        alternateRowStyles:{fillColor:COL_LIGHT},
+        columnStyles:{
+          0:{cellWidth:14, fontStyle:'bold', textColor:COL_PLAN},
+          1:{cellWidth:58},
+          2:{cellWidth:14, halign:'center'},
+          3:{cellWidth:26},
+          4:{cellWidth:30},
+          5:{cellWidth:12, halign:'center'},
+          6:{cellWidth:10, halign:'center', textColor:COL_PLAN, fontStyle:'bold'},
+          7:{cellWidth:12, halign:'center'},
+        },
+        didDrawPage:(data)=>{ y=data.cursor.y+2; }
+      });
+      y=doc.lastAutoTable.finalY+3;
+    }
+
+    // GE trips
+    if(td.ge.length){
+      doc.setFillColor(5,150,105);
+      doc.roundedRect(M,y,W-M*2,5,1,1,'F');
+      doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','bold');
+      doc.text('✈ Global Experience Trips', M+2, y+3.5);
+      y+=6;
+      doc.autoTable({
+        startY:y, margin:{left:M,right:M},
+        head:[['Location','Dates','Theme','Faculty']],
+        body:td.ge.map(g=>[g.location, g.dates, g.theme, g.faculty]),
+        styles:{fontSize:7, cellPadding:2, textColor:COL_SUBHD, lineColor:[209,250,229], lineWidth:0.2},
+        headStyles:{fillColor:[4,120,87], textColor:[255,255,255], fontStyle:'bold', fontSize:7},
+        alternateRowStyles:{fillColor:[240,253,244]},
+        columnStyles:{0:{cellWidth:28,fontStyle:'bold',textColor:[5,150,105]},1:{cellWidth:28},2:{cellWidth:90},3:{cellWidth:36}},
+      });
+      y=doc.lastAutoTable.finalY+4;
+    }
+    y+=2;
+
+    // New page if needed
+    if(y>260){ doc.addPage(); y=M; }
+  });
+
+  // ── Summary footer on last page ────────────────────────────────────
+  if(y>250){ doc.addPage(); y=M; }
+  doc.setDrawColor(...COL_PLAN); doc.setLineWidth(0.5);
+  doc.line(M,y,W-M,y); y+=5;
+  doc.setTextColor(...COL_TEXT); doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('Total Credits: '+totalCredits+' cr  ·  Courses: '+[...pd.plan.AUT,...pd.plan.SPR,...pd.plan.SUM].length+'  ·  Estimated leave: ~'+totalLeave+' working days', M, y);
+  doc.text('London Business School — Executive MBA 2027', W-M, y, {align:'right'});
+
+  // Page numbers
+  const pageCount=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFontSize(7); doc.setTextColor(150,150,150);
+    doc.text('Page '+i+' of '+pageCount, W/2, 292, {align:'center'});
+  }
+
+  doc.save('EMBALJ2027_Plan'+planKey+'_'+new Date().toISOString().slice(0,10)+'.pdf');
+  pbToast('PDF exported ✓');
+}
+
+function pbExportComparePDF(){
+  if(typeof window.jspdf === 'undefined'){ pbToast('PDF library loading… try again in a moment'); return; }
+  const { jsPDF } = window.jspdf;
+  const uniq = advUniqueCourses();
+  const TL_START = new Date('2026-10-12');
+
+  function wkNum(d){ return Math.ceil((d - TL_START)/86400000/7)+1; }
+  function fmtShort(d){ return d ? d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''; }
+
+  // Gather plan data for both plans
+  function gatherPlan(planKey){
+    const pd = pbPlans[planKey];
+    let credits=0, leave=0;
+    const terms={};
+    ['AUT','SPR','SUM'].forEach(t=>{
+      terms[t]={courses:[],ge:[]};
+      pd.plan[t].forEach(code=>{
+        const c=uniq[code]; if(!c) return;
+        const sess=pbGetSessionForPlan(code,t,planKey)||c;
+        const d=extractDates(sess);
+        credits+=pbCredits(sess); leave+=pbLeaveDays(sess);
+        terms[t].courses.push({
+          code:c.code, name:c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,40),
+          sa:c.sa, format:sess.format||'', credits:pbCredits(sess), leave:pbLeaveDays(sess),
+          dates:d?fmtShort(d.start)+' – '+fmtShort(d.end):'',
+          weeks:d?'W'+wkNum(d.start)+(wkNum(d.end)!==wkNum(d.start)?'–W'+wkNum(d.end):''):'',
+          col:FMT_COL[fmtType(sess)]||'#64748b'
+        });
+      });
+      pd.ge[t].forEach(gc=>{
+        const g=pbGEById(gc); if(!g) return;
+        leave+=7;
+        terms[t].ge.push({location:g.location, dates:g.dates, theme:(g.theme||'').slice(0,40)});
+      });
+    });
+    const allCourses=[...pd.plan.AUT,...pd.plan.SPR,...pd.plan.SUM];
+    const allGE=[...pd.ge.AUT,...pd.ge.SPR,...pd.ge.SUM];
+    return {credits,leave,terms,count:allCourses.length,geCount:allGE.length};
+  }
+
+  const pA = gatherPlan('A');
+  const pB = gatherPlan('B');
+
+  // Find unique / shared
+  const codesA = new Set([...pbPlans.A.plan.AUT,...pbPlans.A.plan.SPR,...pbPlans.A.plan.SUM]);
+  const codesB = new Set([...pbPlans.B.plan.AUT,...pbPlans.B.plan.SPR,...pbPlans.B.plan.SUM]);
+  const inBoth  = [...codesA].filter(c=>codesB.has(c));
+  const onlyA   = [...codesA].filter(c=>!codesB.has(c));
+  const onlyB   = [...codesB].filter(c=>!codesA.has(c));
+
+  // ── PDF setup ─────────────────────────────────────────────────────
+  const doc = new jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+  const W=297, H=210, M=12;
+  let y=M;
+
+  const COL_HDR   = [15,23,42];
+  const COL_A     = [99,102,241];
+  const COL_B     = [8,145,178];
+  const COL_TEXT  = [71,85,105];
+  const COL_LIGHT = [248,250,252];
+  const TERM_COLS = {AUT:[59,130,246],SPR:[16,185,129],SUM:[249,115,22]};
+  const TERM_LABELS= {AUT:'Autumn 2026',SPR:'Spring 2027',SUM:'Summer 2027'};
+  const HALF = (W - M*3) / 2;
+
+  // ── Header ────────────────────────────────────────────────────────
+  doc.setFillColor(...COL_HDR);
+  doc.rect(0,0,W,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text('EMBALJ 2027 — Plan Comparison: A vs B', M, 10);
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('London Business School · AY 2026–27 · Generated '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}), M, 17);
+  y = 26;
+
+  // ── Side-by-side stats ────────────────────────────────────────────
+  [{plan:'A',data:pA,col:COL_A},{plan:'B',data:pB,col:COL_B}].forEach(({plan,data,col},pi)=>{
+    const x = M + pi*(HALF+M);
+    doc.setFillColor(...col); doc.setAlpha && doc.setAlpha(0.1);
+    doc.roundedRect(x,y,HALF,16,2,2,'F');
+    doc.setAlpha && doc.setAlpha(1);
+    doc.setTextColor(...col); doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text('Plan '+plan, x+4, y+7);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...COL_TEXT);
+    doc.text(`${data.credits} credits  ·  ${data.count} courses  ·  ${data.geCount} GE trips  ·  ~${data.leave}d leave`, x+4, y+13);
+  });
+  y+=20;
+
+  // ── Overlap summary ───────────────────────────────────────────────
+  doc.setFillColor(241,245,249);
+  doc.roundedRect(M,y,W-M*2,14,2,2,'F');
+  doc.setTextColor(...COL_TEXT); doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+  const inBothNames = inBoth.map(c=>{const x=uniq[c];return x?x.code:'?';}).join(', ')||'—';
+  const onlyANames  = onlyA.map(c=>{const x=uniq[c];return x?x.code:'?';}).join(', ')||'—';
+  const onlyBNames  = onlyB.map(c=>{const x=uniq[c];return x?x.code:'?';}).join(', ')||'—';
+  doc.setFont('helvetica','bold'); doc.setTextColor(...COL_A);
+  doc.text('In both ('+inBoth.length+'):', M+3, y+5);
+  doc.setFont('helvetica','normal'); doc.setTextColor(...COL_TEXT);
+  doc.text(inBothNames.slice(0,100), M+28, y+5);
+  doc.setFont('helvetica','bold'); doc.setTextColor(...COL_A);
+  doc.text('Only A ('+onlyA.length+'):', M+3, y+10);
+  doc.setFont('helvetica','normal'); doc.setTextColor(...COL_TEXT);
+  doc.text(onlyANames.slice(0,80), M+26, y+10);
+  doc.setFont('helvetica','bold'); doc.setTextColor(...COL_B);
+  doc.text('Only B ('+onlyB.length+'):', M+3+HALF/2, y+10);
+  doc.setFont('helvetica','normal'); doc.setTextColor(...COL_TEXT);
+  doc.text(onlyBNames.slice(0,80), M+HALF/2+26, y+10);
+  y+=18;
+
+  // ── Per-term side-by-side tables ─────────────────────────────────
+  ['AUT','SPR','SUM'].forEach(t=>{
+    const tdA=pA.terms[t], tdB=pB.terms[t];
+    if(!tdA.courses.length && !tdA.ge.length && !tdB.courses.length && !tdB.ge.length) return;
+
+    // Term header
+    doc.setFillColor(...TERM_COLS[t]);
+    doc.rect(M,y,W-M*2,7,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text(TERM_LABELS[t], M+3, y+5);
+    y+=9;
+
+    // Render table for each plan side by side
+    const cols = ['Code','Course','SA','Format','Dates','Wk','Cr'];
+    const colW  = [12,54,10,28,26,12,9];
+
+    [{plan:'A',td:tdA,col:COL_A,x:M},{plan:'B',td:tdB,col:COL_B,x:M+HALF+M}].forEach(({plan,td,col,x})=>{
+      // Plan label
+      doc.setFillColor(...col);
+      doc.roundedRect(x,y,HALF,5,1,1,'F');
+      doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','bold');
+      doc.text('Plan '+plan, x+2, y+3.5);
+
+      if(td.courses.length){
+        doc.autoTable({
+          startY: y+5,
+          margin:{left:x, right:W-x-HALF},
+          tableWidth: HALF,
+          head:[cols],
+          body:td.courses.map(c=>[c.code,c.name,c.sa,c.format,c.dates,c.weeks,c.credits+'cr']),
+          styles:{fontSize:6.5,cellPadding:1.8,textColor:COL_TEXT,lineColor:[226,232,240],lineWidth:0.15},
+          headStyles:{fillColor:[30,41,59],textColor:[255,255,255],fontStyle:'bold',fontSize:6.5},
+          alternateRowStyles:{fillColor:COL_LIGHT},
+          columnStyles:{
+            0:{cellWidth:colW[0],fontStyle:'bold',textColor:col},
+            1:{cellWidth:colW[1]},
+            2:{cellWidth:colW[2],halign:'center'},
+            3:{cellWidth:colW[3]},
+            4:{cellWidth:colW[4]},
+            5:{cellWidth:colW[5],halign:'center'},
+            6:{cellWidth:colW[6],halign:'center',textColor:col,fontStyle:'bold'},
+          },
+        });
+      } else {
+        doc.setTextColor(150,150,150); doc.setFontSize(7);
+        doc.text('No courses', x+4, y+11);
+      }
+
+      // GE under table
+      if(td.ge.length){
+        const geY = (td.courses.length ? doc.lastAutoTable.finalY : y+13) + 1;
+        td.ge.forEach((g,gi)=>{
+          doc.setFillColor(5,150,105);
+          doc.roundedRect(x,geY+gi*7,HALF,6,1,1,'F');
+          doc.setTextColor(255,255,255); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+          doc.text('✈ '+g.location+' · '+g.dates, x+2, geY+gi*7+4);
+        });
+      }
+    });
+
+    // Advance y by the taller of the two tables
+    const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : y;
+    y = finalY + (pA.terms[t].ge.length||pB.terms[t].ge.length ? pA.terms[t].ge.length*7+3 : 4);
+
+    if(y > H-16){ doc.addPage(); y=M; }
+  });
+
+  // ── Footer ────────────────────────────────────────────────────────
+  const pageCount=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFontSize(6.5); doc.setTextColor(150,150,150);
+    doc.text('EMBALJ 2027 Plan Comparison · Page '+i+' of '+pageCount+' · London Business School', W/2, H-4, {align:'center'});
+  }
+
+  doc.save('EMBALJ2027_Comparison_A_vs_B_'+new Date().toISOString().slice(0,10)+'.pdf');
+  pbToast('Comparison PDF exported ✓');
+}
+
 function pbCopyPlan(){
   const src=pbActivePlan, dst=src==='A'?'B':'A';
   if(!confirm('Copy Plan '+src+' → Plan '+dst+'? This will overwrite Plan '+dst+'.')) return;
@@ -741,7 +1100,9 @@ function buildPlanBuilder(){
         </div>
         <div class="pb-stats" id="pbStats"></div>
         <div class="pb-actions">
-          <button class="pb-btn primary" onclick="pbExport()">⬇ Export plan</button>
+          <button class="pb-btn primary" onclick="pbExport()">⬇ Export JSON</button>
+          <button class="pb-btn primary" onclick="pbExportPDF()" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">📄 Export PDF</button>
+          <button class="pb-btn primary" id="pbExportCmpBtn" onclick="pbExportComparePDF()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);display:none">📄 Export Comparison PDF</button>
           <button class="pb-btn" onclick="pbImport()">⬆ Import plan</button>
           <button class="pb-btn" onclick="pbClear()">🗑 Clear plan</button>
           <button class="pb-btn" onclick="pbAutoFill()">✨ Suggest from Advisor role</button>
