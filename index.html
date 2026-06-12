@@ -238,6 +238,7 @@ h1 em{font-style:italic;color:var(--ge)}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <header class="header">
@@ -880,6 +881,173 @@ function pbExportPDF(){
   pbToast('PDF exported ✓');
 }
 
+function pbExportExcel(){
+  if(typeof XLSX === 'undefined'){ pbToast('Excel library loading… try again in a moment'); return; }
+
+  const uniq = advUniqueCourses();
+  const TL_START = new Date('2026-10-12');
+  function wkNum(d){ return d ? Math.ceil((d-TL_START)/86400000/7) : ''; }
+  function fmtDate(d){ return d ? d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : ''; }
+  function fmtShort(d){ return d ? d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''; }
+
+  const TERM_LABELS = {AUT:'Autumn 2026', SPR:'Spring 2027', SUM:'Summer 2027'};
+  const wb = XLSX.utils.book_new();
+
+  // ── Build rows for a given plan ──────────────────────────────────
+  function buildPlanRows(planKey){
+    const pd = pbPlans[planKey];
+    const rows = [];
+    let totalCr=0, totalLeave=0, totalCourses=0;
+    ['AUT','SPR','SUM'].forEach(t=>{
+      if(pd.plan[t].length || pd.ge[t].length){
+        // Term header row
+        rows.push({
+          'Term': TERM_LABELS[t], 'Code':'', 'Course Name':'', 'Stream':'',
+          'Format':'', 'Start Date':'', 'End Date':'', 'Week Start':'',
+          'Week End':'', 'Sessions':'', 'Credits':'', 'Est. Leave Days':'', 'Faculty':'', 'Type':''
+        });
+        pd.plan[t].forEach(code=>{
+          const c=uniq[code]; if(!c) return;
+          const sess=pbGetSessionForPlan(code,t,planKey)||c;
+          const d=extractDates(sess);
+          const cr=pbCredits(sess), lv=pbLeaveDays(sess);
+          totalCr+=cr; totalLeave+=lv; totalCourses++;
+          rows.push({
+            'Term': TERM_LABELS[t],
+            'Code': c.code,
+            'Course Name': c.name.replace(/ NEW ELECTIVE.*/,'').trim(),
+            'Stream': c.sa,
+            'Format': sess.format||'',
+            'Start Date': d?fmtShort(d.start):'',
+            'End Date': d?fmtShort(d.end):'',
+            'Week Start': d?wkNum(d.start):'',
+            'Week End': d?wkNum(d.end):'',
+            'Sessions': sess.sessions||'',
+            'Credits': cr,
+            'Est. Leave Days': lv,
+            'Faculty': c.faculty||'',
+            'Type': 'Course'
+          });
+        });
+        pd.ge[t].forEach(gc=>{
+          const g=pbGEById(gc); if(!g) return;
+          const gd=pbGEDates(g);
+          totalLeave+=7;
+          rows.push({
+            'Term': TERM_LABELS[t],
+            'Code': g.code,
+            'Course Name': g.location+' — '+(g.theme||'').slice(0,50),
+            'Stream': 'GE',
+            'Format': 'Global Experience',
+            'Start Date': gd?fmtShort(gd.start):'',
+            'End Date': gd?fmtShort(gd.end):'',
+            'Week Start': gd?wkNum(gd.start):'',
+            'Week End': gd?wkNum(gd.end):'',
+            'Sessions': '',
+            'Credits': 0,
+            'Est. Leave Days': 7,
+            'Faculty': g.faculty||'',
+            'Type': 'GE Trip'
+          });
+        });
+        // Term subtotal
+        rows.push({
+          'Term': '', 'Code':'', 'Course Name':'SUBTOTAL — '+TERM_LABELS[t],
+          'Stream':'','Format':'','Start Date':'','End Date':'','Week Start':'','Week End':'',
+          'Sessions':'',
+          'Credits': pd.plan[t].reduce((s,code)=>{ const c=uniq[code]; const sess=pbGetSessionForPlan(code,t,planKey)||c; return s+(c?pbCredits(sess):0); },0),
+          'Est. Leave Days': pd.plan[t].reduce((s,code)=>{ const c=uniq[code]; const sess=pbGetSessionForPlan(code,t,planKey)||c; return s+(c?pbLeaveDays(sess):0); },0) + pd.ge[t].length*7,
+          'Faculty':'','Type':''
+        });
+        rows.push({'Term':'','Code':'','Course Name':'','Stream':'','Format':'','Start Date':'','End Date':'','Week Start':'','Week End':'','Sessions':'','Credits':'','Est. Leave Days':'','Faculty':'','Type':''});
+      }
+    });
+    // Grand total
+    rows.push({
+      'Term':'TOTAL', 'Code':'', 'Course Name':'PLAN '+planKey+' GRAND TOTAL',
+      'Stream':'','Format':'','Start Date':'','End Date':'','Week Start':'','Week End':'',
+      'Sessions':'',
+      'Credits': totalCr,
+      'Est. Leave Days': totalLeave,
+      'Faculty': totalCourses+' courses + '+[...pbPlans[planKey].ge.AUT,...pbPlans[planKey].ge.SPR,...pbPlans[planKey].ge.SUM].length+' GE trips',
+      'Type':''
+    });
+    return rows;
+  }
+
+  // ── Plan A sheet ──────────────────────────────────────────────────
+  const rowsA = buildPlanRows('A');
+  const wsA = XLSX.utils.json_to_sheet(rowsA);
+  wsA['!cols'] = [{wch:16},{wch:8},{wch:45},{wch:9},{wch:22},{wch:12},{wch:12},{wch:7},{wch:7},{wch:8},{wch:8},{wch:14},{wch:28},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsA, 'Plan A');
+
+  // ── Plan B sheet ──────────────────────────────────────────────────
+  const rowsB = buildPlanRows('B');
+  const wsB = XLSX.utils.json_to_sheet(rowsB);
+  wsB['!cols'] = [{wch:16},{wch:8},{wch:45},{wch:9},{wch:22},{wch:12},{wch:12},{wch:7},{wch:7},{wch:8},{wch:8},{wch:14},{wch:28},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsB, 'Plan B');
+
+  // ── Comparison sheet ──────────────────────────────────────────────
+  const codesA=new Set([...pbPlans.A.plan.AUT,...pbPlans.A.plan.SPR,...pbPlans.A.plan.SUM]);
+  const codesB=new Set([...pbPlans.B.plan.AUT,...pbPlans.B.plan.SPR,...pbPlans.B.plan.SUM]);
+  const allCodes=[...new Set([...codesA,...codesB])].sort();
+  const cmpRows=allCodes.map(code=>{
+    const c=uniq[code]; if(!c) return null;
+    const inA=codesA.has(code), inB=codesB.has(code);
+    const termA=[...pbPlans.A.plan.AUT,...pbPlans.A.plan.SPR,...pbPlans.A.plan.SUM].includes(code)
+      ? (['AUT','SPR','SUM'].find(t=>pbPlans.A.plan[t].includes(code))) : '';
+    const termB=[...pbPlans.B.plan.AUT,...pbPlans.B.plan.SPR,...pbPlans.B.plan.SUM].includes(code)
+      ? (['AUT','SPR','SUM'].find(t=>pbPlans.B.plan[t].includes(code))) : '';
+    const sessA=termA?pbGetSessionForPlan(code,termA,'A')||c:null;
+    const sessB=termB?pbGetSessionForPlan(code,termB,'B')||c:null;
+    const dA=sessA?extractDates(sessA):null;
+    const dB=sessB?extractDates(sessB):null;
+    return {
+      'Code': c.code,
+      'Course Name': c.name.replace(/ NEW ELECTIVE.*/,'').trim(),
+      'Stream': c.sa,
+      'In Plan A': inA?'✓':'',
+      'Plan A Term': termA?TERM_LABELS[termA]:'',
+      'Plan A Dates': dA?fmtShort(dA.start)+' – '+fmtShort(dA.end):'',
+      'Plan A Credits': sessA?pbCredits(sessA):'',
+      'In Plan B': inB?'✓':'',
+      'Plan B Term': termB?TERM_LABELS[termB]:'',
+      'Plan B Dates': dB?fmtShort(dB.start)+' – '+fmtShort(dB.end):'',
+      'Plan B Credits': sessB?pbCredits(sessB):'',
+      'Status': inA&&inB?'Both plans':inA?'Plan A only':'Plan B only'
+    };
+  }).filter(Boolean);
+
+  const wsC = XLSX.utils.json_to_sheet(cmpRows);
+  wsC['!cols']=[{wch:8},{wch:45},{wch:9},{wch:10},{wch:16},{wch:22},{wch:12},{wch:10},{wch:16},{wch:22},{wch:12},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsC, 'Comparison');
+
+  // ── Summary sheet ─────────────────────────────────────────────────
+  function planSummary(pk){
+    const pd=pbPlans[pk];
+    const all=[...pd.plan.AUT,...pd.plan.SPR,...pd.plan.SUM];
+    const allGE=[...pd.ge.AUT,...pd.ge.SPR,...pd.ge.SUM];
+    let cr=0,lv=0;
+    ['AUT','SPR','SUM'].forEach(t=>pd.plan[t].forEach(code=>{ const c=uniq[code]; const s=pbGetSessionForPlan(code,t,pk)||c; if(c){cr+=pbCredits(s);lv+=pbLeaveDays(s);} }));
+    lv+=allGE.length*7;
+    return {'Plan':'Plan '+pk,'Total Credits':cr,'Total Courses':all.length,'GE Trips':allGE.length,'Est. Leave Days':lv};
+  }
+  const sumRows=[planSummary('A'), planSummary('B'),
+    {'Plan':'Difference','Total Credits':planSummary('A')['Total Credits']-planSummary('B')['Total Credits'],
+     'Total Courses':planSummary('A')['Total Courses']-planSummary('B')['Total Courses'],
+     'GE Trips':planSummary('A')['GE Trips']-planSummary('B')['GE Trips'],
+     'Est. Leave Days':planSummary('A')['Est. Leave Days']-planSummary('B')['Est. Leave Days']}
+  ];
+  const wsSum=XLSX.utils.json_to_sheet(sumRows);
+  wsSum['!cols']=[{wch:14},{wch:14},{wch:14},{wch:10},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsSum, 'Summary');
+
+  // ── Download ─────────────────────────────────────────────────────
+  const fname='EMBALJ2027_Plans_'+new Date().toISOString().slice(0,10)+'.xlsx';
+  XLSX.writeFile(wb, fname);
+  pbToast('Excel exported: '+fname+' ✓');
+}
+
 function pbExportComparePDF(){
   if(typeof window.jspdf === 'undefined'){ pbToast('PDF library loading… try again in a moment'); return; }
   const { jsPDF } = window.jspdf;
@@ -1100,7 +1268,7 @@ function buildPlanBuilder(){
         </div>
         <div class="pb-stats" id="pbStats"></div>
         <div class="pb-actions">
-          <button class="pb-btn primary" onclick="pbExport()">⬇ Export JSON</button>
+          <button class="pb-btn primary" onclick="pbExportExcel()" style="background:linear-gradient(135deg,#16a34a,#15803d)">⬇ Export Excel</button>
           <button class="pb-btn primary" onclick="pbExportPDF()" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">📄 Export PDF</button>
           <button class="pb-btn primary" id="pbExportCmpBtn" onclick="pbExportComparePDF()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);display:none">📄 Export Comparison PDF</button>
           <button class="pb-btn" onclick="pbImport()">⬆ Import plan</button>
