@@ -497,6 +497,7 @@ function switchView(v){
 // ── Plan A/B state ────────────────────────────────────────────────────
 let pbActivePlan = 'A';  // 'A' or 'B'
 let pbCompareMode = false;
+let pbHideEmptyWeeks = false;
 const pbPlans = {
   A: { plan:{AUT:[],SPR:[],SUM:[]}, ge:{AUT:[],SPR:[],SUM:[]}, fmtChoice:{}, fmtExact:{} },
   B: { plan:{AUT:[],SPR:[],SUM:[]}, ge:{AUT:[],SPR:[],SUM:[]}, fmtChoice:{}, fmtExact:{} }
@@ -584,6 +585,11 @@ function pbSave(){
   try{ localStorage.setItem('embalj_plans_ab', JSON.stringify(pbPlans)); }catch(e){}
 }
 
+function pbToggleEmptyWeeks(){
+  pbHideEmptyWeeks = !pbHideEmptyWeeks;
+  pbRenderTimeline();
+}
+
 function pbSwitchPlan(p){
   pbActivePlan = p;
   pbCompareMode = false;
@@ -593,7 +599,8 @@ function pbSwitchPlan(p){
   if(btnA){ btnA.classList.toggle('on', p==='A'); }
   if(btnB){ btnB.classList.toggle('on', p==='B'); }
   if(cmpBtn){ cmpBtn.classList.remove('on'); }
-  pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+  pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats();
+  pbRenderTimeline();
   pbToast('Now building Plan '+p+' — drag courses to add them here');
 }
 
@@ -603,7 +610,8 @@ function pbToggleCompare(){
   if(btn) btn.classList.toggle('on', pbCompareMode);
   const wrap = document.getElementById('pbTermsWrap');
   if(pbCompareMode){ pbRenderCompare(); }
-  else { if(wrap) wrap.innerHTML='<div class="pb-terms" id="pbTerms"></div>'; pbRenderTerms(); pbRenderTimeline(); }
+  else { if(wrap) wrap.innerHTML='<div class="pb-terms" id="pbTerms"></div>'; pbRenderTerms(); }
+  pbRenderTimeline();  // timeline always refreshes to show/hide compare
 }
 
 function pbGetSessionForPlan(code, term, planKey){
@@ -658,11 +666,39 @@ function pbRenderCompare(){
     return `<div><div class="pb-compare-head" style="background:${col}">Plan ${p}</div>
       ${terms.map(t=>{
         const codes=pd.plan[t.key]||[],geCodes=pd.ge[t.key]||[];
+        const TL_START_CMP=new Date('2026-10-12'),TL_END_CMP=new Date('2027-07-02');
+        const totalMs_CMP=TL_END_CMP-TL_START_CMP;
+        function wkNum(d){ return Math.ceil((d-TL_START_CMP)/86400000/7)+1; }
+        function fmtShort(d){ return d?d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}):''; }
         const slots=[...codes.map(code=>{const c=uniq[code];if(!c)return '';
-          const sess=pbGetSessionForPlan(code,t.key,p)||c;const col2=FMT_COL[fmtType(sess)]||'#64748b';
-          return `<div class="pb-slot" style="border-left-color:${col2};margin-bottom:4px"><div class="pb-slot-code">${c.code} <span style="color:#64748b">· ${c.sa}</span></div><div class="pb-slot-name">${c.name.slice(0,36)}</div><div class="pb-slot-meta">${pbCredits(sess)} cr · ~${pbLeaveDays(sess)}d</div></div>`;
+          const sess=pbGetSessionForPlan(code,t.key,p)||c;
+          const col2=FMT_COL[fmtType(sess)]||'#64748b';
+          const d=extractDates(sess);
+          const dateStr=d?fmtShort(d.start)+' – '+fmtShort(d.end):'';
+          const wkStr=d?'W'+wkNum(d.start)+(wkNum(d.end)!==wkNum(d.start)?'–W'+wkNum(d.end):''):'';
+          return `<div class="pb-slot" style="border-left-color:${col2};margin-bottom:5px">
+            <div class="pb-slot-code">${c.code} <span style="color:#64748b">· ${c.sa}</span>
+              ${wkStr?`<span style="float:right;color:#64748b;font-size:9px;font-weight:500">${wkStr}</span>`:''}
+            </div>
+            <div class="pb-slot-name">${c.name.replace(/ NEW ELECTIVE.*/,'').slice(0,38)}</div>
+            <div class="pb-slot-meta" style="display:flex;justify-content:space-between;align-items:center">
+              <span style="color:#8892a4">${dateStr}</span>
+              <span style="color:#a5b4fc;font-weight:600">${pbCredits(sess)} cr</span>
+            </div>
+            <div class="pb-slot-meta">${sess.format||''} · ~${pbLeaveDays(sess)}d</div>
+          </div>`;
         }),...geCodes.map(gc=>{const g=pbGEById(gc);if(!g)return '';
-          return `<div class="pb-slot" style="border-left-color:#059669;background:rgba(5,150,105,.08);margin-bottom:4px"><div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location}</div><div class="pb-slot-meta">${g.dates}</div></div>`;
+          const gd=pbGEDates(g);
+          const wkStr=gd?'W'+wkNum(gd.start)+(wkNum(gd.end)!==wkNum(gd.start)?'–W'+wkNum(gd.end):''):'';
+          return `<div class="pb-slot" style="border-left-color:#059669;background:rgba(5,150,105,.08);margin-bottom:5px">
+            <div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location}
+              ${wkStr?`<span style="float:right;color:#64748b;font-size:9px">${wkStr}</span>`:''}
+            </div>
+            <div class="pb-slot-meta" style="display:flex;justify-content:space-between">
+              <span>${g.dates}</span>
+              <span style="color:#64748b">~7d</span>
+            </div>
+          </div>`;
         })];
         return `<div style="background:var(--card);border:1px solid var(--bdr);border-radius:0 0 8px 8px;padding:10px;margin-bottom:8px">
           <div style="font-size:10px;font-weight:700;color:${t.col};margin-bottom:6px;text-transform:uppercase">${t.label}</div>
@@ -1067,163 +1103,250 @@ function pbRenderTimeline(){
   const host = document.getElementById('pbTimeline');
   if(!host) return;
   const uniq = advUniqueCourses();
-  const all = [...get_pbPlan().AUT,...get_pbPlan().SPR,...get_pbPlan().SUM];
 
-  if(!all.length){ host.innerHTML=''; return; }
-
-  // Build list of {code,name,start,end,term,fmt,col,leaveDays} for courses with dates
-  const TL_START=new Date('2026-10-12'), TL_END=new Date('2027-07-02');
-  const totalMs=TL_END-TL_START;
-  const items=[];
-  ['AUT','SPR','SUM'].forEach(t=>{
-    get_pbPlan()[t].forEach(code=>{
-      const c=uniq[code]; if(!c) return;
-      const sess = pbGetSession(code, t) || c;
-      const d=extractDates(sess);
-      if(!d) return;
-      items.push({code, name:c.name, start:d.start, end:d.end, term:t,
-        fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess), isGE:false});
+  // Gather items for a given plan key
+  function gatherItems(planKey){
+    const pd = pbPlans[planKey];
+    const items=[];
+    ['AUT','SPR','SUM'].forEach(t=>{
+      pd.plan[t].forEach(code=>{
+        const c=uniq[code]; if(!c) return;
+        const sess=pbGetSessionForPlan(code,t,planKey)||c;
+        const d=extractDates(sess); if(!d) return;
+        items.push({code, name:c.name, start:d.start, end:d.end, term:t,
+          fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess), isGE:false});
+      });
+      pd.ge[t].forEach(gc=>{
+        const g=pbGEById(gc); if(!g) return;
+        const d=pbGEDates(g); if(!d) return;
+        items.push({code:'✈️ '+g.location, name:g.location+' — '+(g.theme||''), start:d.start, end:d.end,
+          fmt:'GE', col:'#059669', leaveDays:7, isGE:true});
+      });
     });
-    // GE trips
-    get_pbGEPlan()[t].forEach(gc=>{
-      const g=pbGEById(gc); if(!g) return;
-      const d=pbGEDates(g);
-      if(!d) return;
-      items.push({code:'✈️ '+g.location, name:g.location+' — '+(g.theme||''), start:d.start, end:d.end, term:t,
-        fmt:'GE', col:'#059669', leaveDays:7, isGE:true});
-    });
-  });
-  if(!items.length){ host.innerHTML='<div class="pb-empty" style="margin-top:14px">Selected items have no fixed dates to plot.</div>'; return; }
-  items.sort((a,b)=>a.start-b.start);
-
-  // ── Compute insights ──
-  // total weeks away = sum of (end-start) in weeks (approx leave); also unique calendar coverage
-  let totalLeaveDays = items.reduce((s,i)=>s+i.leaveDays,0);
-  const totalWeeksAway = (totalLeaveDays/5).toFixed(1);
-
-  // overlaps
-  const overlaps=[];
-  for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++){
-    if(items[i].start<=items[j].end && items[j].start<=items[i].end)
-      overlaps.push([items[i].code, items[j].code]);
+    return items.sort((a,b)=>a.start-b.start);
   }
 
-  // trip-combining: block-week courses whose dates are within 7 days of each other
-  const combos=[];
-  const blocks = items.filter(i=>i.fmt==='BW'||i.fmt==='DUBAI'||i.fmt==='GE');
-  for(let i=0;i<blocks.length;i++) for(let j=i+1;j<blocks.length;j++){
-    const gap = Math.abs(blocks[j].start - blocks[i].end)/86400000;
-    const gap2 = Math.abs(blocks[i].start - blocks[j].end)/86400000;
-    const minGap = Math.min(gap, gap2);
-    if(minGap<=10 && !(blocks[i].start<=blocks[j].end && blocks[j].start<=blocks[i].end)){
-      combos.push([blocks[i].code, blocks[j].code, Math.round(minGap)]);
+  const itemsA = gatherItems('A');
+  const itemsB = gatherItems('B');
+  const allItems = pbCompareMode ? [...itemsA,...itemsB] : gatherItems(pbActivePlan);
+
+  if(!allItems.length){ host.innerHTML=''; return; }
+
+  // ── Compute active/busy weeks ──
+  const TL_FULL_START=new Date('2026-10-12'), TL_FULL_END=new Date('2027-07-02');
+  const WEEK_MS=7*86400000;
+  const nWeeksFull=Math.ceil((TL_FULL_END-TL_FULL_START)/WEEK_MS);
+
+  // Which weeks have at least one item from any plan?
+  const busyWeeks=new Set();
+  allItems.forEach(it=>{
+    for(let w=0;w<nWeeksFull;w++){
+      const wS=new Date(TL_FULL_START.getTime()+w*WEEK_MS);
+      const wE=new Date(wS.getTime()+WEEK_MS);
+      if(it.start<wE && it.end>=wS) busyWeeks.add(w);
     }
+  });
+  // Also keep weeks adjacent to busy weeks (context)
+  const displayWeeks=new Set();
+  busyWeeks.forEach(w=>{ displayWeeks.add(w); displayWeeks.add(w-1); displayWeeks.add(w+1); });
+
+  const hideEmpty = (typeof pbHideEmptyWeeks!=='undefined') ? pbHideEmptyWeeks : false;
+  const weeksToShow = hideEmpty
+    ? [...Array(nWeeksFull).keys()].filter(w=>displayWeeks.has(w))
+    : [...Array(nWeeksFull).keys()];
+
+  // Build mapping: week index -> x position & width
+  const cellW = hideEmpty ? null : null;
+  const TLW_TOTAL = Math.max(700, (host.clientWidth||800)) - 40;
+  const weekX=[], weekW=[];
+  if(hideEmpty){
+    const wCell = Math.floor(TLW_TOTAL / weeksToShow.length);
+    weeksToShow.forEach((w,i)=>{ weekX[w]=i*wCell; weekW[w]=wCell; });
+  } else {
+    const wCell = TLW_TOTAL/nWeeksFull;
+    for(let w=0;w<nWeeksFull;w++){ weekX[w]=w*wCell; weekW[w]=wCell; }
+  }
+  const TLW = hideEmpty ? weeksToShow.length * Math.floor(TLW_TOTAL/weeksToShow.length) : TLW_TOTAL;
+
+  // Convert a date to X position
+  function dateToX(d){
+    const ms = d - TL_FULL_START;
+    const w = ms/WEEK_MS;
+    const wi = Math.floor(w), frac = w-wi;
+    if(weekX[wi]===undefined) return hideEmpty ? 0 : (ms/(TL_FULL_END-TL_FULL_START)*TLW);
+    return weekX[wi] + frac*(weekW[wi]||0);
   }
 
-  // gaps between consecutive blocks
+  // ── Insights for active/compare plan ──
+  const activeItems = pbCompareMode ? itemsA : allItems;
+  const totalLeaveDays = activeItems.reduce((s,i)=>s+i.leaveDays,0);
+  const totalWeeksAway = (totalLeaveDays/5).toFixed(1);
+  const overlaps=[];
+  for(let i=0;i<activeItems.length;i++) for(let j=i+1;j<activeItems.length;j++)
+    if(activeItems[i].start<=activeItems[j].end && activeItems[j].start<=activeItems[i].end)
+      overlaps.push([activeItems[i].code, activeItems[j].code]);
+  const blocks=activeItems.filter(i=>i.fmt==='BW'||i.fmt==='DUBAI'||i.fmt==='GE');
+  const combos=[];
+  for(let i=0;i<blocks.length;i++) for(let j=i+1;j<blocks.length;j++){
+    const gap=Math.min(Math.abs(blocks[j].start-blocks[i].end)/86400000, Math.abs(blocks[i].start-blocks[j].end)/86400000);
+    if(gap<=10 && !(blocks[i].start<=blocks[j].end && blocks[j].start<=blocks[i].end)) combos.push([blocks[i].code,blocks[j].code,Math.round(gap)]);
+  }
   const sortedBlocks=[...blocks].sort((a,b)=>a.start-b.start);
 
-  const W = Math.max(700, (host.clientWidth||800));
-  const TLW = W - 40;
-  const rowH = 30;
+  const planLabel = pbCompareMode ? 'Plan A vs B' : 'Plan '+pbActivePlan;
 
-  // ── Render ──
   let html = `<div style="margin-top:18px;background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <h3 style="font-size:13px;font-weight:600;color:var(--tx1);margin:0;letter-spacing:.03em">📍 My Picks Timeline</h3>
-      <div style="display:flex;gap:14px;font-size:11px;color:var(--tx3)">
-        <span>🗓️ <b style="color:var(--tx1)">${totalWeeksAway}</b> weeks away (~${totalLeaveDays} leave days)</span>
-        <span>⚠️ <b style="color:${overlaps.length?'#f87171':'#6ee7b7'}">${overlaps.length}</b> overlap${overlaps.length!==1?'s':''}</span>
-        <span>🔗 <b style="color:${combos.length?'#fbbf24':'var(--tx3)'}">${combos.length}</b> trip combo${combos.length!==1?'s':''}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <h3 style="font-size:13px;font-weight:600;color:var(--tx1);margin:0">📍 ${planLabel} Timeline</h3>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:12px;font-size:11px;color:var(--tx3)">
+          <span>🗓️ <b style="color:var(--tx1)">${totalWeeksAway}</b>w away (~${totalLeaveDays}d)</span>
+          <span>⚠️ <b style="color:${overlaps.length?'#f87171':'#6ee7b7'}">${overlaps.length}</b> overlap${overlaps.length!==1?'s':''}</span>
+          <span>🔗 <b style="color:${combos.length?'#fbbf24':'var(--tx3)'}">${combos.length}</b> combo${combos.length!==1?'s':''}</span>
+        </div>
+        <button onclick="pbToggleEmptyWeeks()" style="background:${hideEmpty?'rgba(99,102,241,.25)':'rgba(255,255,255,.06)'};border:1px solid ${hideEmpty?'rgba(99,102,241,.5)':'var(--bdr)'};color:${hideEmpty?'#a5b4fc':'var(--tx3)'};padding:4px 10px;border-radius:7px;font-size:10.5px;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap">
+          ${hideEmpty?'Show all weeks':'Hide empty weeks'}
+        </button>
       </div>
     </div>`;
 
-  // term band header
+  // Compare legend
+  if(pbCompareMode){
+    html += `<div style="display:flex;gap:12px;font-size:11px;margin-bottom:8px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:18px;height:6px;background:#6366f1;border-radius:2px;display:inline-block"></span>Plan A</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:18px;height:6px;background:#0891B2;border-radius:2px;display:inline-block"></span>Plan B</span>
+      <span style="color:var(--tx3)">· same row = same course · A on top, B below</span>
+    </div>`;
+  }
+
+  // Term labels header
   const TERM_BANDS=[
     {s:'2026-10-12',e:'2026-12-22',col:'#3b82f6',label:'Autumn'},
     {s:'2027-01-04',e:'2027-03-28',col:'#10b981',label:'Spring'},
     {s:'2027-03-22',e:'2027-07-02',col:'#f97316',label:'Summer'},
   ];
-  html += `<div style="position:relative;height:18px;margin-bottom:4px">`;
+  html+=`<div style="position:relative;height:16px;margin-bottom:2px;width:${TLW}px">`;
   TERM_BANDS.forEach(tb=>{
-    const lx=(new Date(tb.s)-TL_START)/totalMs*TLW;
-    const wd=(new Date(tb.e)-new Date(tb.s))/totalMs*TLW;
-    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;font-size:9px;font-weight:700;color:${tb.col};opacity:.8;letter-spacing:.05em;text-transform:uppercase">${tb.label}</div>`;
+    const lx=dateToX(new Date(tb.s));
+    html+=`<div style="position:absolute;left:${lx}px;top:0;font-size:9px;font-weight:700;color:${tb.col};opacity:.8;letter-spacing:.05em;text-transform:uppercase">${tb.label}</div>`;
   });
-  html += `</div>`;
+  html+=`</div>`;
 
-  // ── Week-number ruler ──
-  const WEEK_MS = 7*86400000;
-  const nWeeks = Math.ceil(totalMs/WEEK_MS);
-  html += `<div style="position:relative;width:${TLW}px;height:16px;margin-bottom:2px;border-bottom:1px solid var(--bdr)">`;
-  for(let w=0; w<nWeeks; w++){
-    const wkStart = new Date(TL_START.getTime()+w*WEEK_MS);
-    const lx = (w*WEEK_MS)/totalMs*TLW;
-    const wWd = WEEK_MS/totalMs*TLW;
-    // label every 2nd week to avoid crowding when narrow
-    const showNum = (wWd>=14) || (w%2===0);
-    html += `<div style="position:absolute;left:${lx}px;width:${wWd}px;top:0;height:100%;border-left:1px solid rgba(255,255,255,.05);font-size:7.5px;color:var(--tx3);text-align:center;line-height:16px;overflow:hidden" title="Week ${w+1} — starts ${wkStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}">${showNum?('W'+(w+1)):''}</div>`;
+  // Week ruler
+  html+=`<div style="position:relative;width:${TLW}px;height:16px;margin-bottom:2px;border-bottom:1px solid var(--bdr)">`;
+  weeksToShow.forEach((w,i)=>{
+    const lx=weekX[w], ww=weekW[w];
+    const wkStart=new Date(TL_FULL_START.getTime()+w*WEEK_MS);
+    const showLbl=(ww>=14)||(i%2===0);
+    html+=`<div style="position:absolute;left:${lx}px;width:${ww}px;top:0;height:100%;border-left:1px solid rgba(255,255,255,.05);font-size:7.5px;color:var(--tx3);text-align:center;line-height:16px;overflow:hidden" title="W${w+1} — ${wkStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}">${showLbl?'W'+(w+1):''}</div>`;
+  });
+  if(hideEmpty){
+    // Show gap markers between non-contiguous weeks
+    for(let i=1;i<weeksToShow.length;i++){
+      if(weeksToShow[i]-weeksToShow[i-1]>1){
+        const lx=weekX[weeksToShow[i]];
+        html+=`<div style="position:absolute;left:${lx-1}px;top:0;height:200%;width:2px;background:rgba(99,102,241,.3);z-index:5"></div>`;
+      }
+    }
   }
-  html += `</div>`;
+  html+=`</div>`;
 
-  // constraint bands
-  html += `<div style="position:relative;width:${TLW}px;height:${items.length*rowH+10}px;background:rgba(255,255,255,.015);border-radius:8px;overflow:hidden">`;
-  // faint week gridlines behind everything
-  for(let w=0; w<nWeeks; w++){
-    const lx = (w*WEEK_MS)/totalMs*TLW;
-    html += `<div style="position:absolute;left:${lx}px;top:0;height:100%;width:1px;background:rgba(255,255,255,.035)"></div>`;
+  // ── Build rows ──
+  // In compare mode: one row per unique course code, A bar on top + B bar below
+  const rowH = pbCompareMode ? 42 : 30;
+  let rows; // [{code, name, itemA, itemB}] or [{code, name, item}]
+
+  if(pbCompareMode){
+    const allCodes=[...new Set([...itemsA,...itemsB].map(i=>i.code))];
+    rows=allCodes.map(code=>{
+      const iA=itemsA.find(i=>i.code===code);
+      const iB=itemsB.find(i=>i.code===code);
+      const name=(iA||iB).name;
+      return {code,name,itemA:iA,itemB:iB};
+    });
+  } else {
+    rows=allItems.map(it=>({code:it.code, name:it.name, item:it}));
   }
-  // term background tints
+
+  const totalHeight=rows.length*rowH+10;
+  html+=`<div style="position:relative;width:${TLW}px;height:${totalHeight}px;background:rgba(255,255,255,.015);border-radius:8px;overflow:hidden">`;
+
+  // gridlines + bands
+  weeksToShow.forEach(w=>{
+    html+=`<div style="position:absolute;left:${weekX[w]}px;top:0;height:100%;width:1px;background:rgba(255,255,255,.03)"></div>`;
+  });
   TERM_BANDS.forEach(tb=>{
-    const lx=(new Date(tb.s)-TL_START)/totalMs*TLW;
-    const wd=(new Date(tb.e)-new Date(tb.s))/totalMs*TLW;
-    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${tb.col};opacity:.04"></div>`;
+    const lx=dateToX(new Date(tb.s)), rx=dateToX(new Date(tb.e));
+    html+=`<div style="position:absolute;left:${lx}px;width:${rx-lx}px;top:0;height:100%;background:${tb.col};opacity:.04"></div>`;
   });
-  // religious constraint markers
   CONSTRAINT_DATES.forEach(cd=>{
-    const cs=new Date(cd.s),ce=new Date(cd.e);
-    const lx=(cs-TL_START)/totalMs*TLW;
-    const wd=Math.max(2,(ce-cs)/totalMs*TLW);
-    html+=`<div style="position:absolute;left:${lx}px;width:${wd}px;top:0;height:100%;background:${cd.col};opacity:.12;border-left:1px dashed ${cd.col}88;border-right:1px dashed ${cd.col}88" title="${cd.label}"></div>`;
+    const lx=dateToX(new Date(cd.s)), rx=dateToX(new Date(cd.e));
+    html+=`<div style="position:absolute;left:${lx}px;width:${Math.max(2,rx-lx)}px;top:0;height:100%;background:${cd.col};opacity:.12;border-left:1px dashed ${cd.col}88" title="${cd.label}"></div>`;
   });
 
-  // course bars
-  items.forEach((it,i)=>{
-    const lx=Math.max(0,(it.start-TL_START)/totalMs*TLW);
-    const wd=Math.max(20,(it.end-it.start+86400000)/totalMs*TLW);
-    const isOverlap = overlaps.some(o=>o.includes(it.code));
-    const isCombo = combos.some(c=>c.includes(it.code));
-    const top = i*rowH+5;
-    let border = isOverlap?'2px solid #f87171':isCombo?'2px solid #fbbf24':'none';
-    html+=`<div style="position:absolute;left:${lx}px;top:${top}px;width:${wd}px;height:20px;background:${it.col};border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;box-shadow:${border==='none'?'none':'0 0 0 '+border};box-sizing:border-box" title="${it.name} (${it.code})">${it.code}</div>`;
+  // bars
+  rows.forEach((row,ri)=>{
+    const top=ri*rowH;
+    if(pbCompareMode){
+      // Plan A bar (top half)
+      if(row.itemA){
+        const lx=Math.max(0,dateToX(row.itemA.start));
+        const rx=dateToX(new Date(row.itemA.end.getTime()+86400000));
+        const wd=Math.max(16,rx-lx);
+        const isOv=overlaps.some(o=>o.includes(row.itemA.code));
+        html+=`<div style="position:absolute;left:${lx}px;top:${top+2}px;width:${wd}px;height:17px;background:#6366f1;border-radius:3px;display:flex;align-items:center;padding:0 5px;font-size:8.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;box-sizing:border-box${isOv?';box-shadow:0 0 0 1.5px #f87171':''}" title="Plan A: ${row.name}">${row.code}</div>`;
+      }
+      // Plan B bar (bottom half)
+      if(row.itemB){
+        const lx=Math.max(0,dateToX(row.itemB.start));
+        const rx=dateToX(new Date(row.itemB.end.getTime()+86400000));
+        const wd=Math.max(16,rx-lx);
+        html+=`<div style="position:absolute;left:${lx}px;top:${top+21}px;width:${wd}px;height:17px;background:#0891B2;border-radius:3px;display:flex;align-items:center;padding:0 5px;font-size:8.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;box-sizing:border-box" title="Plan B: ${row.name}">${row.code}</div>`;
+      }
+      // "Only in A" or "Only in B" labels
+      if(!row.itemA){
+        html+=`<div style="position:absolute;left:4px;top:${top+2}px;height:17px;font-size:8px;color:#475569;line-height:17px">— not in Plan A</div>`;
+      }
+      if(!row.itemB){
+        html+=`<div style="position:absolute;left:4px;top:${top+21}px;height:17px;font-size:8px;color:#475569;line-height:17px">— not in Plan B</div>`;
+      }
+      // Row divider
+      html+=`<div style="position:absolute;left:0;top:${top+rowH-1}px;width:100%;height:1px;background:rgba(255,255,255,.04)"></div>`;
+    } else {
+      const it=row.item;
+      const lx=Math.max(0,dateToX(it.start));
+      const rx=dateToX(new Date(it.end.getTime()+86400000));
+      const wd=Math.max(16,rx-lx);
+      const isOverlap=overlaps.some(o=>o.includes(it.code));
+      const isCombo=combos.some(c=>c.includes(it.code));
+      const bdr=isOverlap?';box-shadow:0 0 0 1.5px #f87171':isCombo?';box-shadow:0 0 0 1.5px #fbbf24':'';
+      html+=`<div style="position:absolute;left:${lx}px;top:${top+5}px;width:${wd}px;height:20px;background:${it.col};border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;box-sizing:border-box${bdr}" title="${it.name}">${it.code}</div>`;
+    }
   });
-  html += `</div>`;
 
-  // insight callouts
+  html+=`</div>`;
+
+  // Insight callouts
   if(combos.length){
-    html += `<div style="margin-top:12px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#fcd34d">
-      <b>🔗 Trip-combining opportunities</b> — these block weeks are close enough to combine into one trip (saving flights & travel days):<br>
-      ${combos.map(c=>`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(251,191,36,.15);padding:2px 8px;border-radius:10px">${c[0]} + ${c[1]} <span style="opacity:.7">(${c[2]}d apart)</span></span>`).join('')}
+    html+=`<div style="margin-top:10px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:9px 12px;font-size:11px;color:#fcd34d">
+      <b>🔗 Trip-combining:</b> ${combos.map(c=>`${c[0]} + ${c[1]} (${c[2]}d apart)`).join(' · ')}
     </div>`;
   }
   if(overlaps.length){
-    html += `<div style="margin-top:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#fca5a5">
-      <b>⚠️ Date overlaps</b> — you can't attend both of these at once:<br>
-      ${overlaps.map(o=>`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(239,68,68,.15);padding:2px 8px;border-radius:10px">${o[0]} ↔ ${o[1]}</span>`).join('')}
+    html+=`<div style="margin-top:6px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:9px 12px;font-size:11px;color:#fca5a5">
+      <b>⚠️ Overlaps:</b> ${overlaps.map(o=>`${o[0]} ↔ ${o[1]}`).join(' · ')}
     </div>`;
   }
-
-  // gaps between blocks
   if(sortedBlocks.length>1){
     let gapHtml='';
     for(let i=0;i<sortedBlocks.length-1;i++){
-      const gapDays=Math.round((sortedBlocks[i+1].start - sortedBlocks[i].end)/86400000);
-      if(gapDays>0) gapHtml+=`<span style="display:inline-block;margin:3px 6px 0 0;background:rgba(255,255,255,.06);padding:2px 8px;border-radius:10px">${sortedBlocks[i].code}→${sortedBlocks[i+1].code}: <b>${gapDays}d</b></span>`;
+      const gd=Math.round((sortedBlocks[i+1].start-sortedBlocks[i].end)/86400000);
+      if(gd>0) gapHtml+=`<span style="margin-right:10px">${sortedBlocks[i].code}→${sortedBlocks[i+1].code}: <b>${gd}d</b></span>`;
     }
-    if(gapHtml) html += `<div style="margin-top:8px;font-size:11px;color:var(--tx3)"><b style="color:var(--tx2)">⏱️ Gaps between block weeks:</b><br>${gapHtml}</div>`;
+    if(gapHtml) html+=`<div style="margin-top:6px;font-size:11px;color:var(--tx3)">⏱️ Block gaps: ${gapHtml}</div>`;
   }
 
-  html += `</div>`;
+  html+=`</div>`;
   host.innerHTML = html;
 }
 
