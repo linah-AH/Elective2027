@@ -222,6 +222,19 @@ h1 em{font-style:italic;color:var(--ge)}
 
 .ctrl-search{background:rgba(255,255,255,.06);border:1px solid var(--bdr);border-radius:8px;padding:5px 11px;font-size:12px;color:var(--tx1);font-family:'DM Sans',sans-serif;outline:none;width:180px;transition:border-color .2s}
 .ctrl-search:focus{border-color:rgba(99,102,241,.5)}
+
+/* ── PLAN A/B SWITCHER ─────────────────────────────────────────────── */
+.pb-plan-switch{display:flex;gap:0;background:rgba(255,255,255,.06);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;flex-shrink:0}
+.pb-plan-btn{padding:7px 22px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--tx3);font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:.02em}
+.pb-plan-btn.on{background:var(--accent);color:#fff}
+.pb-plan-btn:not(.on):hover{background:rgba(255,255,255,.08);color:var(--tx1)}
+.pb-plan-compare{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--tx3);cursor:pointer;background:none;border:1px solid var(--bdr);border-radius:8px;padding:6px 12px;font-family:'DM Sans',sans-serif;transition:all .2s}
+.pb-plan-compare:hover{color:var(--tx1);border-color:rgba(255,255,255,.3)}
+.pb-plan-compare.on{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.5);color:#a5b4fc}
+/* Compare view */
+.pb-compare-wrap{display:flex;gap:14px}
+.pb-compare-col{flex:1;min-width:0}
+.pb-compare-head{font-size:13px;font-weight:700;padding:8px 12px;border-radius:8px 8px 0 0;color:#fff;letter-spacing:.04em;text-align:center}
 </style>
 </head>
 <body>
@@ -471,16 +484,30 @@ function switchView(v){
   document.getElementById('vs-timeline').classList.toggle('on', v==='timeline');
   document.getElementById('vs-builder').classList.toggle('on', v==='builder');
   if(v==='timeline') buildTimeline();
-  if(v==='builder') buildPlanBuilder();
+  if(v==='builder'){
+    const el=document.getElementById('view-builder');
+    if(!el.querySelector('.pb-wrap')) buildPlanBuilder();  // first time only
+    else { pbRenderFilters(); pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // PLAN BUILDER — drag & drop course shortlist
 // ══════════════════════════════════════════════════════════════════════
-let pbPlan = { AUT:[], SPR:[], SUM:[] };
-let pbFmtChoice = {};  // key "TERM|CODE" -> chosen fmtType (e.g. 'BW')
-let pbGEPlan = { AUT:[], SPR:[], SUM:[] };  // GE trip codes per term
-let pbFmtExact = {};  // key "TERM|CODE" -> exact format string for date precision
+// ── Plan A/B state ────────────────────────────────────────────────────
+let pbActivePlan = 'A';  // 'A' or 'B'
+let pbCompareMode = false;
+const pbPlans = {
+  A: { plan:{AUT:[],SPR:[],SUM:[]}, ge:{AUT:[],SPR:[],SUM:[]}, fmtChoice:{}, fmtExact:{} },
+  B: { plan:{AUT:[],SPR:[],SUM:[]}, ge:{AUT:[],SPR:[],SUM:[]}, fmtChoice:{}, fmtExact:{} }
+};
+// Convenience getters for active plan
+function pbPlanData(p){ return pbPlans[p||pbActivePlan]; }
+// Legacy aliases — always point to active plan
+function get_pbPlan(){ return pbPlans[pbActivePlan].plan; }
+function get_pbGEPlan(){ return pbPlans[pbActivePlan].ge; }
+function get_pbFmtChoice(){ return pbPlans[pbActivePlan].fmtChoice; }
+function get_pbFmtExact(){ return pbPlans[pbActivePlan].fmtExact; }
 
 // Parse a GE date string like "18-24 October 2026" or "2-8 May 2027" into {start,end}
 function pbGEDates(g){
@@ -508,13 +535,13 @@ function pbGetSession(code, term){
     return COURSE_DB.find(c=>c.code===code) || null;
   }
   // 1. Exact format string (distinguishes Block Week 9 vs Block Week 10)
-  const exact = pbFmtExact[term+'|'+code];
+  const exact = get_pbFmtExact()[term+'|'+code];
   if(exact){
     const me = sessions.find(c=>c.format===exact);
     if(me) return me;
   }
   // 2. Format type (BW / FIVE_W / DUBAI…)
-  const want = pbFmtChoice[term+'|'+code];
+  const want = get_pbFmtChoice()[term+'|'+code];
   if(want){
     const m = sessions.find(c=>fmtType(c)===want);
     if(m) return m;
@@ -544,20 +571,114 @@ function pbLeaveDays(c){
 
 function pbLoadSaved(){
   try{
-    const s=localStorage.getItem('embalj_plan'); if(s) pbPlan=JSON.parse(s);
-    const fc=localStorage.getItem('embalj_fmtchoice'); if(fc) pbFmtChoice=JSON.parse(fc);
-    const gp=localStorage.getItem('embalj_geplan'); if(gp) pbGEPlan=JSON.parse(gp);
-    const fe=localStorage.getItem('embalj_fmtexact'); if(fe) pbFmtExact=JSON.parse(fe);
-  }catch(e){ pbPlan={AUT:[],SPR:[],SUM:[]}; pbFmtChoice={}; }
-}
-function pbSave(){
-  try{
-    localStorage.setItem('embalj_plan', JSON.stringify(pbPlan));
-    localStorage.setItem('embalj_fmtchoice', JSON.stringify(pbFmtChoice));
-    localStorage.setItem('embalj_geplan', JSON.stringify(pbGEPlan));
-    localStorage.setItem('embalj_fmtexact', JSON.stringify(pbFmtExact));
+    const saved=localStorage.getItem('embalj_plans_ab');
+    if(saved){ const d=JSON.parse(saved); if(d.A&&d.B){ pbPlans.A=d.A; pbPlans.B=d.B; return; } }
+    // Migrate old single-plan data
+    const s=localStorage.getItem('embalj_plan'); if(s) pbPlans.A.plan=JSON.parse(s);
+    const fc=localStorage.getItem('embalj_fmtchoice'); if(fc) pbPlans.A.fmtChoice=JSON.parse(fc);
+    const gp=localStorage.getItem('embalj_geplan'); if(gp) pbPlans.A.ge=JSON.parse(gp);
+    const fe=localStorage.getItem('embalj_fmtexact'); if(fe) pbPlans.A.fmtExact=JSON.parse(fe);
   }catch(e){}
 }
+function pbSave(){
+  try{ localStorage.setItem('embalj_plans_ab', JSON.stringify(pbPlans)); }catch(e){}
+}
+
+function pbSwitchPlan(p){
+  pbActivePlan = p;
+  pbCompareMode = false;
+  const btnA = document.getElementById('pbBtnA');
+  const btnB = document.getElementById('pbBtnB');
+  const cmpBtn = document.getElementById('pbCompareBtn');
+  if(btnA){ btnA.classList.toggle('on', p==='A'); }
+  if(btnB){ btnB.classList.toggle('on', p==='B'); }
+  if(cmpBtn){ cmpBtn.classList.remove('on'); }
+  pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+  pbToast('Now building Plan '+p+' — drag courses to add them here');
+}
+
+function pbToggleCompare(){
+  pbCompareMode = !pbCompareMode;
+  const btn = document.getElementById('pbCompareBtn');
+  if(btn) btn.classList.toggle('on', pbCompareMode);
+  const wrap = document.getElementById('pbTermsWrap');
+  if(pbCompareMode){ pbRenderCompare(); }
+  else { if(wrap) wrap.innerHTML='<div class="pb-terms" id="pbTerms"></div>'; pbRenderTerms(); pbRenderTimeline(); }
+}
+
+function pbGetSessionForPlan(code, term, planKey){
+  const pd = pbPlans[planKey];
+  const sessions = COURSE_DB.filter(c=>c.code===code && c.term===term);
+  if(!sessions.length) return COURSE_DB.find(c=>c.code===code)||null;
+  const exact = pd.fmtExact[term+'|'+code];
+  if(exact){ const me=sessions.find(c=>c.format===exact); if(me) return me; }
+  const want = pd.fmtChoice[term+'|'+code];
+  if(want){ const m=sessions.find(c=>fmtType(c)===want); if(m) return m; }
+  return sessions[0];
+}
+
+function pbRenderCompare(){
+  const wrap = document.getElementById('pbTermsWrap');
+  if(!wrap) return;
+  const terms = [{key:'AUT',label:'Autumn 2026',col:'#3b82f6'},{key:'SPR',label:'Spring 2027',col:'#10b981'},{key:'SUM',label:'Summer 2027',col:'#f97316'}];
+  const uniq = advUniqueCourses();
+
+  function planStats(p){
+    const pd=pbPlans[p];
+    const all=[...pd.plan.AUT,...pd.plan.SPR,...pd.plan.SUM];
+    const allGE=[...pd.ge.AUT,...pd.ge.SPR,...pd.ge.SUM];
+    let credits=0,leave=0;
+    ['AUT','SPR','SUM'].forEach(t=>{ pd.plan[t].forEach(code=>{ const s=pbGetSessionForPlan(code,t,p); if(s){credits+=pbCredits(s);leave+=pbLeaveDays(s);} }); });
+    leave+=allGE.length*7;
+    return {all,allGE,credits,leave};
+  }
+  const sa=planStats('A'), sb=planStats('B');
+  const onlyA=sa.all.filter(c=>!sb.all.includes(c));
+  const onlyB=sb.all.filter(c=>!sa.all.includes(c));
+  const inBoth=sa.all.filter(c=>sb.all.includes(c));
+
+  wrap.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    ${['A','B'].map(p=>{const s=p==='A'?sa:sb;const col=p==='A'?'#6366f1':'#0891B2';
+    return `<div style="background:var(--card);border:1px solid ${col}44;border-top:3px solid ${col};border-radius:10px;padding:12px">
+      <div style="font-size:13px;font-weight:700;color:${col};margin-bottom:8px">Plan ${p}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+        <span style="color:var(--tx2)"><b style="color:${col};font-size:16px">${s.credits}</b> credits</span>
+        <span style="color:var(--tx2)"><b style="color:${col};font-size:16px">${s.all.length}</b> courses</span>
+        <span style="color:var(--tx2)"><b style="color:${col};font-size:16px">~${s.leave}</b> leave days</span>
+      </div></div>`;}).join('')}
+  </div>
+  <div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:10px;font-size:11.5px">
+    <div style="color:var(--tx3);margin-bottom:6px;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Comparison</div>
+    ${inBoth.length?`<div style="margin-bottom:5px">🤝 <b style="color:var(--tx2)">In both (${inBoth.length}):</b> <span style="color:var(--tx3)">${inBoth.map(c=>{const x=uniq[c];return x?x.code:c;}).join(', ')}</span></div>`:''}
+    ${onlyA.length?`<div style="margin-bottom:5px"><span style="color:#6366f1">Plan A only (${onlyA.length}):</span> <span style="color:var(--tx3)">${onlyA.map(c=>{const x=uniq[c];return x?x.code:c;}).join(', ')}</span></div>`:''}
+    ${onlyB.length?`<div><span style="color:#0891B2">Plan B only (${onlyB.length}):</span> <span style="color:var(--tx3)">${onlyB.map(c=>{const x=uniq[c];return x?x.code:c;}).join(', ')}</span></div>`:''}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    ${['A','B'].map(p=>{const pd=pbPlans[p];const col=p==='A'?'#6366f1':'#0891B2';
+    return `<div><div class="pb-compare-head" style="background:${col}">Plan ${p}</div>
+      ${terms.map(t=>{
+        const codes=pd.plan[t.key]||[],geCodes=pd.ge[t.key]||[];
+        const slots=[...codes.map(code=>{const c=uniq[code];if(!c)return '';
+          const sess=pbGetSessionForPlan(code,t.key,p)||c;const col2=FMT_COL[fmtType(sess)]||'#64748b';
+          return `<div class="pb-slot" style="border-left-color:${col2};margin-bottom:4px"><div class="pb-slot-code">${c.code} <span style="color:#64748b">· ${c.sa}</span></div><div class="pb-slot-name">${c.name.slice(0,36)}</div><div class="pb-slot-meta">${pbCredits(sess)} cr · ~${pbLeaveDays(sess)}d</div></div>`;
+        }),...geCodes.map(gc=>{const g=pbGEById(gc);if(!g)return '';
+          return `<div class="pb-slot" style="border-left-color:#059669;background:rgba(5,150,105,.08);margin-bottom:4px"><div class="pb-slot-code" style="color:#6ee7b7">✈️ ${g.location}</div><div class="pb-slot-meta">${g.dates}</div></div>`;
+        })];
+        return `<div style="background:var(--card);border:1px solid var(--bdr);border-radius:0 0 8px 8px;padding:10px;margin-bottom:8px">
+          <div style="font-size:10px;font-weight:700;color:${t.col};margin-bottom:6px;text-transform:uppercase">${t.label}</div>
+          ${slots.join('')||'<div style="color:var(--tx3);font-size:11px;font-style:italic">Empty</div>'}
+        </div>`;}).join('')}
+    </div>`;}).join('')}
+  </div>`;
+}
+
+function pbCopyPlan(){
+  const src=pbActivePlan, dst=src==='A'?'B':'A';
+  if(!confirm('Copy Plan '+src+' → Plan '+dst+'? This will overwrite Plan '+dst+'.')) return;
+  pbPlans[dst]=JSON.parse(JSON.stringify(pbPlans[src]));
+  pbSave(); pbToast('Plan '+src+' copied to Plan '+dst+' ✓');
+}
+
 
 function buildPlanBuilder(){
   pbLoadSaved();
@@ -573,20 +694,32 @@ function buildPlanBuilder(){
         <div id="pbGECards"></div>
       </div>
       <div class="pb-board">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="pb-plan-switch">
+            <button class="pb-plan-btn ${pbActivePlan==='A'?'on':''}" id="pbBtnA" onclick="pbSwitchPlan('A')">Plan A</button>
+            <button class="pb-plan-btn ${pbActivePlan==='B'?'on':''}" id="pbBtnB" onclick="pbSwitchPlan('B')">Plan B</button>
+          </div>
+          <button class="pb-plan-compare ${pbCompareMode?'on':''}" id="pbCompareBtn" onclick="pbToggleCompare()">⇄ Compare A vs B</button>
+          <div style="flex:1"></div>
+          <button class="pb-btn" onclick="pbCopyPlan()">⎘ Copy to other plan</button>
+        </div>
         <div class="pb-stats" id="pbStats"></div>
         <div class="pb-actions">
           <button class="pb-btn primary" onclick="pbExport()">⬇ Export plan</button>
           <button class="pb-btn" onclick="pbImport()">⬆ Import plan</button>
-          <button class="pb-btn" onclick="pbClear()">🗑 Clear all</button>
+          <button class="pb-btn" onclick="pbClear()">🗑 Clear plan</button>
           <button class="pb-btn" onclick="pbAutoFill()">✨ Suggest from Advisor role</button>
         </div>
-        <div class="pb-terms" id="pbTerms"></div>
+        <div id="pbTermsWrap">
+          <div class="pb-terms" id="pbTerms"></div>
+        </div>
         <div id="pbTimeline"></div>
       </div>
     </div>
     <input type="file" id="pbFile" accept=".json" style="display:none" onchange="pbHandleFile(event)" />
   `;
   pbRenderFilters(); pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
+  pbToast('Now building Plan '+p+' — drag courses to add them here');
 }
 
 function pbRenderFilters(){
@@ -604,7 +737,7 @@ function pbOnSearch(v){ pbSearch=v.toLowerCase(); pbRenderCards(); }
 
 function pbRenderCards(){
   const uniq = advUniqueCourses();
-  const placed = new Set([...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM]);
+  const placed = new Set([...get_pbPlan().AUT,...get_pbPlan().SPR,...get_pbPlan().SUM]);
   let list = Object.values(uniq).filter(c=>{
     if(placed.has(c.code)) return false;
     if(pbFilter!=='ALL' && !c.sa.split('/').some(s=>s.trim()===pbFilter)) return false;
@@ -647,7 +780,7 @@ let pbDragCode = null, pbDragFmt = null;
 let pbDragGE = null;  // GE code being dragged
 
 function pbRenderGECards(){
-  const placed = new Set([...pbGEPlan.AUT,...pbGEPlan.SPR,...pbGEPlan.SUM]);
+  const placed = new Set([...get_pbGEPlan().AUT,...get_pbGEPlan().SPR,...get_pbGEPlan().SUM]);
   const wrap = document.getElementById('pbGECards');
   if(!wrap) return;
   const list = GE_DB.filter(g=>!placed.has(g.code));
@@ -677,7 +810,7 @@ function pbRenderTerms(){
   ];
   const uniq = advUniqueCourses();
   document.getElementById('pbTerms').innerHTML = terms.map(t=>{
-    const codes = pbPlan[t.key]||[];
+    const codes = get_pbPlan()[t.key]||[];
     const slots = codes.map(code=>{
       const c = uniq[code]; if(!c) return '';
       const sess = pbGetSession(code, t.key) || c;
@@ -691,7 +824,7 @@ function pbRenderTerms(){
       </div>`;
     }).join('');
     // GE trips for this term
-    const geCodes = pbGEPlan[t.key]||[];
+    const geCodes = get_pbGEPlan()[t.key]||[];
     const geSlots = geCodes.map(gc=>{
       const g = pbGEById(gc); if(!g) return '';
       const geConflict = pbHasConflict(gc, t.key);
@@ -728,8 +861,8 @@ function pbDrop(e, term){
       pbToast(`${g.location} runs in ${geTerm==='AUT'?'Autumn':geTerm==='SPR'?'Spring':'Summer'}`);
       pbDragGE=null; return;
     }
-    ['AUT','SPR','SUM'].forEach(t=>{ pbGEPlan[t]=pbGEPlan[t].filter(x=>x!==pbDragGE); });
-    if(!pbGEPlan[term].includes(pbDragGE)) pbGEPlan[term].push(pbDragGE);
+    ['AUT','SPR','SUM'].forEach(t=>{ get_pbGEPlan()[t]=get_pbGEPlan()[t].filter(x=>x!==pbDragGE); });
+    if(!get_pbGEPlan()[term].includes(pbDragGE)) get_pbGEPlan()[term].push(pbDragGE);
     pbDragGE=null;
     pbSave(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
     return;
@@ -769,11 +902,11 @@ function pbDrop(e, term){
 
 // Lock in a specific session (by exact format string) for a course in a term
 function pbCommitCourse(code, term, formatStr){
-  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t]=pbPlan[t].filter(x=>x!==code); delete pbFmtChoice[t+'|'+code]; });
-  if(!pbPlan[term].includes(code)) pbPlan[term].push(code);
-  if(formatStr) pbFmtChoice[term+'|'+code] = fmtTypeFromString(formatStr);
+  ['AUT','SPR','SUM'].forEach(t=>{ get_pbPlan()[t]=get_pbPlan()[t].filter(x=>x!==code); delete get_pbFmtChoice()[t+'|'+code]; });
+  if(!get_pbPlan()[term].includes(code)) get_pbPlan()[term].push(code);
+  if(formatStr) get_pbFmtChoice()[term+'|'+code] = fmtTypeFromString(formatStr);
   // store exact format string too for date precision
-  pbFmtExact[term+'|'+code] = formatStr || '';
+  get_pbFmtExact()[term+'|'+code] = formatStr || '';
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 
@@ -808,13 +941,13 @@ function pbPickDate(code, term, formatStr){
 function pbCloseDateModal(){ const m=document.getElementById('pbDateModal'); if(m) m.remove(); }
 
 function pbRemove(term, code){
-  pbPlan[term] = pbPlan[term].filter(x=>x!==code);
-  delete pbFmtChoice[term+'|'+code];
-  delete pbFmtExact[term+'|'+code];
+  get_pbPlan()[term] = get_pbPlan()[term].filter(x=>x!==code);
+  delete get_pbFmtChoice()[term+'|'+code];
+  delete get_pbFmtExact()[term+'|'+code];
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 function pbRemoveGE(term, code){
-  pbGEPlan[term] = pbGEPlan[term].filter(x=>x!==code);
+  get_pbGEPlan()[term] = get_pbGEPlan()[term].filter(x=>x!==code);
   pbSave(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
 }
 
@@ -831,8 +964,8 @@ function pbItemDates(code, term){
 // Build the full list of dated items in a term: courses + GE trips
 function pbTermItems(term){
   const items = [];
-  (pbPlan[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:false}); });
-  (pbGEPlan[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:true}); });
+  (get_pbPlan()[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:false}); });
+  (get_pbGEPlan()[term]||[]).forEach(code=>{ const d=pbItemDates(code,term); if(d) items.push({code, d, isGE:true}); });
   return items;
 }
 
@@ -847,10 +980,10 @@ function pbHasConflict(code, term){
 
 function pbRenderStats(){
   const uniq = advUniqueCourses();
-  const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
-  const allGE = [...pbGEPlan.AUT,...pbGEPlan.SPR,...pbGEPlan.SUM];
+  const all = [...get_pbPlan().AUT,...get_pbPlan().SPR,...get_pbPlan().SUM];
+  const allGE = [...get_pbGEPlan().AUT,...get_pbGEPlan().SPR,...get_pbGEPlan().SUM];
   let totalLeave = 0, conflicts = 0, totalCredits = 0;
-  ['AUT','SPR','SUM'].forEach(t=>{ pbPlan[t].forEach(code=>{ const s=pbGetSession(code,t); if(s){ totalLeave += pbLeaveDays(s); totalCredits += pbCredits(s); } }); });
+  ['AUT','SPR','SUM'].forEach(t=>{ get_pbPlan()[t].forEach(code=>{ const s=pbGetSession(code,t); if(s){ totalLeave += pbLeaveDays(s); totalCredits += pbCredits(s); } }); });
   totalLeave += allGE.length * 7;  // ~7 leave days per GE trip
   // Count overlapping PAIRS across courses AND GE trips
   ['AUT','SPR','SUM'].forEach(t=>{
@@ -859,7 +992,7 @@ function pbRenderStats(){
       if(items[i].d.start <= items[j].d.end && items[j].d.start <= items[i].d.end) conflicts++;
     }
   });
-  const dist = {AUT:pbPlan.AUT.length, SPR:pbPlan.SPR.length, SUM:pbPlan.SUM.length};
+  const dist = {AUT:get_pbPlan().AUT.length, SPR:get_pbPlan().SPR.length, SUM:get_pbPlan().SUM.length};
   const maxT = Math.max(dist.AUT,dist.SPR,dist.SUM,1);
   document.getElementById('pbStats').innerHTML = `
     <div class="pb-stat" style="border-color:rgba(99,102,241,.4)"><div class="pb-stat-label">Total credits</div><div class="pb-stat-value" style="color:#a5b4fc">${totalCredits}</div><div class="pb-stat-sub">from ${all.length} course${all.length!==1?'s':''}</div></div>
@@ -885,15 +1018,16 @@ function pbToast(msg){
   t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
 }
 
-function pbClear(){ if(!confirm('Clear all selected courses?')) return; pbPlan={AUT:[],SPR:[],SUM:[]}; pbFmtChoice={}; pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
+function pbClear(){ if(!confirm(`Clear Plan ${pbActivePlan}?`)) return; pbPlans[pbActivePlan]={plan:{AUT:[],SPR:[],SUM:[]},ge:{AUT:[],SPR:[],SUM:[]},fmtChoice:{},fmtExact:{}}; pbSave(); pbRenderCards(); pbRenderGECards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline(); }
 
 function pbExport(){
   const uniq=advUniqueCourses();
-  const data={generated:new Date().toISOString(),plan:pbPlan,detail:{}};
+  const _ep=pbPlans[pbActivePlan];
+  const data={generated:new Date().toISOString(),planLabel:'Plan '+pbActivePlan,plan:_ep.plan,detail:{}};
   let exportCredits=0;
-  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=pbPlan[t].map(code=>{const c=uniq[code];const s=pbGetSession(code,t);const cr=pbCredits(s||c);exportCredits+=cr;return c?{code:c.code,name:c.name,sa:c.sa,format:s?s.format:(c.formats||[c.format])[0],sessions:(s||c).sessions,credits:cr,leaveDays:pbLeaveDays(s||c)}:{code};}); });
+  ['AUT','SPR','SUM'].forEach(t=>{ data.detail[t]=get_pbPlan()[t].map(code=>{const c=uniq[code];const s=pbGetSessionForPlan(code,t,pbActivePlan)||pbGetSession(code,t);const cr=pbCredits(s||c);exportCredits+=cr;return c?{code:c.code,name:c.name,sa:c.sa,format:s?s.format:(c.formats||[c.format])[0],sessions:(s||c).sessions,credits:cr,leaveDays:pbLeaveDays(s||c)}:{code};}); });
   data.totalCredits = exportCredits;
-  data.geTrips = {AUT:pbGEPlan.AUT,SPR:pbGEPlan.SPR,SUM:pbGEPlan.SUM};
+  data.geTrips = {AUT:get_pbGEPlan().AUT,SPR:get_pbGEPlan().SPR,SUM:get_pbGEPlan().SUM};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='my-embalj-plan.json'; a.click(); URL.revokeObjectURL(url);
@@ -903,7 +1037,7 @@ function pbImport(){ document.getElementById('pbFile').click(); }
 function pbHandleFile(e){
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
-  r.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.plan&&d.plan.AUT){pbPlan=d.plan;pbSave();buildPlanBuilder();pbToast('Plan imported ✓');} }catch(err){ pbToast('Could not read that file'); } };
+  r.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.plan&&d.plan.AUT){pbPlans[pbActivePlan].plan=d.plan;if(d.totalCredits!==undefined){}pbSave();buildPlanBuilder();pbToast(`Plan imported into Plan ${pbActivePlan} ✓`);} else if(d.A&&d.B){pbPlans.A=d.A;pbPlans.B=d.B;pbSave();buildPlanBuilder();pbToast('Both plans imported ✓');} }catch(err){ pbToast('Could not read that file'); } };
   r.readAsText(file);
 }
 
@@ -912,20 +1046,20 @@ function pbAutoFill(){
   if(!role){ pbToast('Open My Advisor first and pick a target role'); return; }
   const uniq=advUniqueCourses();
   const scored=Object.values(uniq).map(c=>({...c,score:scoreC(c,role)})).sort((a,b)=>b.score-a.score);
-  pbPlan={AUT:[],SPR:[],SUM:[]}; let added=0;
-  pbFmtChoice={};
+  const _ap=pbPlans[pbActivePlan];
+  _ap.plan={AUT:[],SPR:[],SUM:[]}; _ap.fmtChoice={}; _ap.fmtExact={}; let added=0;
   for(const c of scored){
     if(added>=6) break;
     const offered=(c.terms||[c.term]); let placed=false;
     for(const t of offered){
       const sess=pbGetSession(c.code,t); const d1=sess&&extractDates(sess);
-      const clash=d1&&pbPlan[t].some(oc=>{const s2=pbGetSession(oc,t);const d2=s2&&extractDates(s2);return d2&&d1.start<=d2.end&&d2.start<=d1.end;});
-      if(!clash){ pbPlan[t].push(c.code); if(sess) pbFmtChoice[t+'|'+c.code]=fmtType(sess); placed=true; added++; break; }
+      const clash=d1&&_ap.plan[t].some(oc=>{const s2=pbGetSession(oc,t);const d2=s2&&extractDates(s2);return d2&&d1.start<=d2.end&&d2.start<=d1.end;});
+      if(!clash){ _ap.plan[t].push(c.code); if(sess) _ap.fmtChoice[t+'|'+c.code]=fmtType(sess); placed=true; added++; break; }
     }
-    if(!placed&&offered.length){ const t=offered[0]; pbPlan[t].push(c.code); const sess=pbGetSession(c.code,t); if(sess) pbFmtChoice[t+'|'+c.code]=fmtType(sess); added++; }
+    if(!placed&&offered.length){ const t=offered[0]; _ap.plan[t].push(c.code); const sess=pbGetSession(c.code,t); if(sess) _ap.fmtChoice[t+'|'+c.code]=fmtType(sess); added++; }
   }
   pbSave(); pbRenderCards(); pbRenderTerms(); pbRenderStats(); pbRenderTimeline();
-  pbToast(`Suggested ${added} courses for ${role} ✓`);
+  pbToast(`Suggested ${added} courses for Plan ${pbActivePlan} (${role}) ✓`);
 }
 
 // ── MY PICKS TIMELINE (in Plan Builder) ───────────────────────────────
@@ -933,7 +1067,7 @@ function pbRenderTimeline(){
   const host = document.getElementById('pbTimeline');
   if(!host) return;
   const uniq = advUniqueCourses();
-  const all = [...pbPlan.AUT,...pbPlan.SPR,...pbPlan.SUM];
+  const all = [...get_pbPlan().AUT,...get_pbPlan().SPR,...get_pbPlan().SUM];
 
   if(!all.length){ host.innerHTML=''; return; }
 
@@ -942,7 +1076,7 @@ function pbRenderTimeline(){
   const totalMs=TL_END-TL_START;
   const items=[];
   ['AUT','SPR','SUM'].forEach(t=>{
-    pbPlan[t].forEach(code=>{
+    get_pbPlan()[t].forEach(code=>{
       const c=uniq[code]; if(!c) return;
       const sess = pbGetSession(code, t) || c;
       const d=extractDates(sess);
@@ -951,7 +1085,7 @@ function pbRenderTimeline(){
         fmt:fmtType(sess), col:FMT_COL[fmtType(sess)]||'#64748b', leaveDays:pbLeaveDays(sess), isGE:false});
     });
     // GE trips
-    pbGEPlan[t].forEach(gc=>{
+    get_pbGEPlan()[t].forEach(gc=>{
       const g=pbGEById(gc); if(!g) return;
       const d=pbGEDates(g);
       if(!d) return;
